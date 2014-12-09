@@ -24,6 +24,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 #include "jbig2.h"
 #include "jbig2_priv.h"
@@ -92,6 +93,11 @@ jbig2_metadata_add(Jbig2Ctx *ctx, Jbig2Metadata *md, const char *key, const int 
 
     /* grow the array if necessary */
     if (md->entries == md->max_entries) {
+	if (md->max_entries >= (INT_MAX>>1)) {
+	    jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1,
+                "integer overflow on metadata structure resize");
+            return -1;
+	}
         md->max_entries <<= 1;
         keys = jbig2_renew(ctx, md->keys, char *, md->max_entries);
         if (keys != NULL)

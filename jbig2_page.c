@@ -23,6 +23,7 @@
 #include "os_types.h"
 
 #include <stdlib.h>
+#include <limits.h>
 
 #include "jbig2.h"
 #include "jbig2_priv.h"
@@ -77,6 +78,11 @@ jbig2_page_info(Jbig2Ctx *ctx, Jbig2Segment *segment, const uint8_t *segment_dat
             index++;
             if (index >= ctx->max_page_index) {
                 /* grow the list */
+                if (ctx->max_page_index >= (INT_MAX>>2)) {
+                    jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number,
+                            "integer overflow in jbig2_page_info");
+                    return -1;
+                }
                 ctx->pages = jbig2_renew(ctx, ctx->pages, Jbig2Page, (ctx->max_page_index <<= 2));
                 for (j = index; j < ctx->max_page_index; j++) {
                     ctx->pages[j].state = JBIG2_PAGE_FREE;
