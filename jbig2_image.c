@@ -103,7 +103,7 @@ jbig2_image_resize(Jbig2Ctx *ctx, Jbig2Image *image, int width, int height)
 {
     if (width == image->width) {
         /* check for integer multiplication overflow */
-        int64_t check = ((int64_t) image->stride) * ((int64_t) height);
+        int64_t check = ((int64_t) image->stride) * ((int64_t) height) + 1;
 
         if (check != (int)check) {
             jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "integer multiplication overflow during resize stride(%d)*height(%d)", image->stride, height);
