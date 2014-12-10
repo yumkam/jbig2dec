@@ -489,6 +489,7 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
                             tparams->REFCORNER = JBIG2_CORNER_TOPLEFT;
                             tparams->SBDSOFFSET = 0;
                             tparams->SBRTEMPLATE = params->SDRTEMPLATE;
+                            memcpy(tparams->sbrat, params->sdrat, 4);
                         }
                         tparams->SBNUMINSTANCES = REFAGGNINST;
 
