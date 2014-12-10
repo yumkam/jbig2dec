@@ -60,6 +60,13 @@ jbig2_image_new(Jbig2Ctx *ctx, int width, int height)
         return NULL;
     }
 
+    if (width & 7) {
+        int i, j;
+        /* clear (partial) last byte */
+        for(i = 0, j = (width >> 3); i < height; i ++, j += stride)
+            image->data[j] = 0;
+    }
+
     image->width = width;
     image->height = height;
     image->stride = stride;
