@@ -147,7 +147,10 @@ jbig2_comment_ascii(Jbig2Ctx *ctx, Jbig2Segment *segment, const uint8_t *segment
         if (!s)
             goto too_short;
         s++;
-        jbig2_metadata_add(ctx, comment, key, value - key, value, s - value);
+        if (jbig2_metadata_add(ctx, comment, key, value - key, value, s - value) < 0) {
+            jbig2_metadata_free(ctx, comment);
+            return -1;
+        }
         jbig2_error(ctx, JBIG2_SEVERITY_INFO, segment->number, "'%s'\t'%s'", key, value);
     }
 
