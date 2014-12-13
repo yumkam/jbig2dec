@@ -226,10 +226,16 @@ jbig2_image_compose(Jbig2Ctx *ctx, Jbig2Image *dst, Jbig2Image *src, int x, int 
     ss = src->data;
 
     if (x < 0) {
+        if ((x & 7)) {
+            /* TODO NYI, fallback to unopt */
+            return jbig2_image_compose_unopt(ctx, dst, src, x, y, op);
+        }
+        ss += (-x) >> 3;
         w += x;
         x = 0;
     }
     if (y < 0) {
+        ss += -y*src->stride;
         h += y;
         y = 0;
     }
