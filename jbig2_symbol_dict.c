@@ -551,13 +551,14 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
                             goto cleanup4;
                         }
 
+                        SDNEWSYMS->glyphs[NSYMSDECODED] = image;
+
                         /* Table 18 */
                         rparams.GRTEMPLATE = params->SDRTEMPLATE;
                         rparams.reference = (ID < ninsyms) ? params->SDINSYMS->glyphs[ID] : SDNEWSYMS->glyphs[ID - ninsyms];
                         /* SumatraPDF: fail on missing glyphs */
                         if (rparams.reference == NULL) {
                             code = jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "missing glyph %d/%d!", ID, ninsyms);
-                            jbig2_image_release(ctx, image);
                             goto cleanup4;
                         }
                         rparams.DX = RDX;
@@ -567,8 +568,6 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
                         code = jbig2_decode_refinement_region(ctx, segment, &rparams, as, image, GR_stats);
                         if (code < 0)
                             goto cleanup4;
-
-                        SDNEWSYMS->glyphs[NSYMSDECODED] = image;
 
                         /* 6.5.8.2.2 (7) */
                         if (params->SDHUFF) {
