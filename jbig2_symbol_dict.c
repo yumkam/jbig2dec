@@ -792,6 +792,23 @@ cleanup1:
     return SDEXSYMS;
 }
 
+#ifdef STRICT_CONFIRMANCE
+#define WARN_CONFIRMANCE(COND,A,B,C,D) do { \
+    if(COND) { \
+        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, \
+                    A" is "B", but contrary to spec "C" is not"D"."); \
+        goto cleanup; \
+    } \
+} while(0)
+#else
+#define WARN_CONFIRMANCE(COND,A,B,C,D) do { \
+    if(COND) { \
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, \
+                    A" is "B", but contrary to spec "C" is not"D"."); \
+    } \
+} while(0)
+#endif
+
 /* 7.4.2 */
 int
 jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data)
@@ -905,20 +922,20 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
             jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "failed to allocate REFAGG huffman table");
             goto cleanup;
         }
+        WARN_CONFIRMANCE(params.SDTEMPLATE, "SDHUFF", "1", "SDTEMPLATE", " zero");
+        WARN_CONFIRMANCE((flags & 0x0100), "SDHUFF", "1", "'Bitmap coding context used'", " zero");
+        WARN_CONFIRMANCE((flags & 0x0200), "SDHUFF", "1", "'Bitmap coding context retained'", " zero");
     }
 
-    /* FIXME: there are quite a few of these conditions to check */
-    /* maybe #ifdef CONFORMANCE and a separate routine */
-    if (!params.SDHUFF) {
-        if (flags & 0x000c) {
-            jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "SDHUFF is zero, but contrary to spec SDHUFFDH is not.");
-            goto cleanup;
-        }
-        if (flags & 0x0030) {
-            jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "SDHUFF is zero, but contrary to spec SDHUFFDW is not.");
-            goto cleanup;
-        }
+    if (!params.SDHUFF && (flags & 0x00FC)) {
+        WARN_CONFIRMANCE((flags & 0x000c), "SDHUFF", "zero", "SDHUFFDH", "");
+        WARN_CONFIRMANCE((flags & 0x0030), "SDHUFF", "zero", "SDHUFFDW", "");
+        WARN_CONFIRMANCE((flags & 0x0040), "SDHUFF", "zero", "SDHUFFBMSIZE", "");
+        WARN_CONFIRMANCE((flags & 0x0080), "SDHUFF", "zero", "SDHUFFAGGINST", "");
     }
+
+    WARN_CONFIRMANCE((params.SDREFAGG == 0 && params.SDRTEMPLATE != 0),
+            "SDREFAGG", "zero", "SDRTEMPLATE", "");
 
     /* 7.4.2.1.2 */
     sdat_bytes = params.SDHUFF ? 0 : params.SDTEMPLATE == 0 ? 8 : 2;
