@@ -451,6 +451,9 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
                             for (i = 0; i < params->SDNUMINSYMS; i++) {
                                 refagg_dicts[0]->glyphs[i] = jbig2_image_clone(ctx, params->SDINSYMS->glyphs[i]);
                             }
+                            for (i=0; i < NSYMSDECODED; i++) {
+                                refagg_dicts[0]->glyphs[params->SDNUMINSYMS + i] = jbig2_image_clone(ctx, SDNEWSYMS->glyphs[i]);
+                            }
 
                             tparams = jbig2_new(ctx, Jbig2TextRegionParams, 1);
                             if (tparams == NULL) {
@@ -552,6 +555,8 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
                         }
 
                         SDNEWSYMS->glyphs[NSYMSDECODED] = image;
+                        if (refagg_dicts != NULL)
+                            refagg_dicts[0]->glyphs[params->SDNUMINSYMS + NSYMSDECODED] = jbig2_image_clone(ctx, image);
 
                         /* Table 18 */
                         rparams.GRTEMPLATE = params->SDRTEMPLATE;
