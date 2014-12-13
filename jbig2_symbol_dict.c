@@ -465,12 +465,12 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
                                 tparams->IAIT = jbig2_arith_int_ctx_new(ctx);
                                 /* Table 31 */
                                 for (SBSYMCODELEN = 0; (1 << SBSYMCODELEN) < (int)(params->SDNUMINSYMS + params->SDNUMNEWSYMS); SBSYMCODELEN++);
-                                tparams->IAID = jbig2_arith_iaid_ctx_new(ctx, SBSYMCODELEN);
+                                tparams->IAID = IAID; /* share with REFAGGNINST == 1 */
                                 tparams->IARI = jbig2_arith_int_ctx_new(ctx);
                                 tparams->IARDW = jbig2_arith_int_ctx_new(ctx);
                                 tparams->IARDH = jbig2_arith_int_ctx_new(ctx);
-                                tparams->IARDX = jbig2_arith_int_ctx_new(ctx);
-                                tparams->IARDY = jbig2_arith_int_ctx_new(ctx);
+                                tparams->IARDX = IARDX; /* ditto */
+                                tparams->IARDY = IARDY; /* ditto */
                             } else {
                                 tparams->SBHUFFFS = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_F);    /* Table B.6 */
                                 tparams->SBHUFFDS = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_H);    /* Table B.8 */
@@ -746,12 +746,12 @@ cleanup4:
             jbig2_arith_int_ctx_free(ctx, tparams->IAFS);
             jbig2_arith_int_ctx_free(ctx, tparams->IADS);
             jbig2_arith_int_ctx_free(ctx, tparams->IAIT);
-            jbig2_arith_iaid_ctx_free(ctx, tparams->IAID);
+            /* tparams->IAID aliases IAID */
             jbig2_arith_int_ctx_free(ctx, tparams->IARI);
             jbig2_arith_int_ctx_free(ctx, tparams->IARDW);
             jbig2_arith_int_ctx_free(ctx, tparams->IARDH);
-            jbig2_arith_int_ctx_free(ctx, tparams->IARDX);
-            jbig2_arith_int_ctx_free(ctx, tparams->IARDY);
+            /* tparams->IARDX aliases IARDX */
+            /* tparams->IARDY aliases IARDY */
         } else {
             jbig2_release_huffman_table(ctx, tparams->SBHUFFFS);
             jbig2_release_huffman_table(ctx, tparams->SBHUFFDS);
