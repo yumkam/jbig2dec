@@ -263,6 +263,12 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
         return NULL;
     }
 
+    {
+        int64_t tmp = params->SDNUMINSYMS + params->SDNUMNEWSYMS;
+
+        for (SBSYMCODELEN = 0; ((int64_t) 1 << SBSYMCODELEN) < tmp; SBSYMCODELEN++) {
+        }
+    }
     as = jbig2_arith_new(ctx, ws);
     if (as == NULL) {
         jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, "failed to allocate as in jbig2_decode_symbol_dict");
@@ -280,9 +286,6 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
             goto cleanup1;
         }
         if (params->SDREFAGG) {
-            int64_t tmp = params->SDNUMINSYMS + params->SDNUMNEWSYMS;
-
-            for (SBSYMCODELEN = 0; ((int64_t) 1 << SBSYMCODELEN) < tmp; SBSYMCODELEN++);
             IAID = jbig2_arith_iaid_ctx_new(ctx, SBSYMCODELEN);
             IARDX = jbig2_arith_int_ctx_new(ctx);
             IARDY = jbig2_arith_int_ctx_new(ctx);
@@ -467,7 +470,6 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
                                 tparams->IADS = jbig2_arith_int_ctx_new(ctx);
                                 tparams->IAIT = jbig2_arith_int_ctx_new(ctx);
                                 /* Table 31 */
-                                for (SBSYMCODELEN = 0; (1 << SBSYMCODELEN) < (int)(params->SDNUMINSYMS + params->SDNUMNEWSYMS); SBSYMCODELEN++);
                                 tparams->IAID = IAID; /* share with REFAGGNINST == 1 */
                                 tparams->IARI = jbig2_arith_int_ctx_new(ctx);
                                 tparams->IARDW = jbig2_arith_int_ctx_new(ctx);
@@ -486,6 +488,10 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
                             tparams->SBHUFF = params->SDHUFF;
                             tparams->SBREFINE = 1;
                             tparams->SBSTRIPS = 1;
+                            tparams->SBSYMCODELEN = SBSYMCODELEN;
+                            if (params->SDHUFF && tparams->SBSYMCODELEN == 0)
+                                tparams->SBSYMCODELEN = 1; /* 6.5.8.2.3 */
+                            tparams->SBSYMCODES = NULL; /* with SBHUFF=1 indicates fixed-length codes, use jbig2_huffman_get_bits(SBSYMCODELEN) to read; unused for SBHUFF=0 */
                             tparams->SBDEFPIXEL = 0;
                             tparams->SBCOMBOP = JBIG2_COMPOSE_OR;
                             tparams->TRANSPOSED = 0;
@@ -495,6 +501,7 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
                             memcpy(tparams->sbrat, params->sdrat, 4);
                         }
                         tparams->SBNUMINSTANCES = REFAGGNINST;
+                        tparams->SBNUMSYMS = params->SDNUMINSYMS + NSYMSDECODED;
 
                         image = jbig2_image_new(ctx, SYMWIDTH, HCHEIGHT);
                         if (image == NULL) {
@@ -504,7 +511,7 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
 
                         /* multiple symbols are handled as a text region */
                         jbig2_decode_text_region(ctx, segment, tparams, (const Jbig2SymbolDict * const *)refagg_dicts,
-                                                 n_refagg_dicts, image, data, size, GR_stats, as, ws);
+                                                 n_refagg_dicts, image, data, size, GR_stats, as, hs, ws);
 
                         SDNEWSYMS->glyphs[NSYMSDECODED] = image;
                         refagg_dicts[0]->glyphs[params->SDNUMINSYMS + NSYMSDECODED] = jbig2_image_clone(ctx, SDNEWSYMS->glyphs[NSYMSDECODED]);

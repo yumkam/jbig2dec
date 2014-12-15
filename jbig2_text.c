@@ -56,7 +56,10 @@ int
 jbig2_decode_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment,
                          const Jbig2TextRegionParams *params,
                          const Jbig2SymbolDict *const *dicts, const int n_dicts,
-                         Jbig2Image *image, const byte *data, const size_t size, Jbig2ArithCx *GR_stats, Jbig2ArithState *as, Jbig2WordStream *ws)
+                         Jbig2Image *image, const byte *data, const size_t size,
+                         Jbig2ArithCx *GR_stats,
+                         Jbig2ArithState *as, Jbig2HuffmanState *hs,
+                         Jbig2WordStream *ws)
 {
     /* relevent bits of 6.4.4 */
     uint32_t NINSTANCES;
@@ -71,133 +74,15 @@ jbig2_decode_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment,
     int S, T;
     int x, y;
     bool first_symbol;
-    uint32_t index, SBNUMSYMS;
+    uint32_t index;
     Jbig2Image *IB = NULL;
-    Jbig2HuffmanState *hs = NULL;
-    Jbig2HuffmanTable *SBSYMCODES = NULL;
     int code = 0;
     int RI;
 
-    SBNUMSYMS = 0;
-    for (index = 0; index < n_dicts; index++) {
-        SBNUMSYMS += dicts[index]->n_symbols;
-    }
-    jbig2_error(ctx, JBIG2_SEVERITY_DEBUG, segment->number, "symbol list contains %d glyphs in %d dictionaries", SBNUMSYMS, n_dicts);
+    jbig2_error(ctx, JBIG2_SEVERITY_DEBUG, segment->number, "symbol list contains %d glyphs in %d dictionaries", params->SBNUMSYMS, n_dicts);
 
     if (params->SBHUFF) {
-        Jbig2HuffmanTable *runcodes = NULL;
-        Jbig2HuffmanParams runcodeparams;
-        Jbig2HuffmanLine runcodelengths[35];
-        Jbig2HuffmanLine *symcodelengths = NULL;
-        Jbig2HuffmanParams symcodeparams;
-        int err, len, range, r;
-
         jbig2_error(ctx, JBIG2_SEVERITY_DEBUG, segment->number, "huffman coded text region");
-        hs = jbig2_huffman_new(ctx, ws);
-        if (hs == NULL) {
-            jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, "failed to allocate storage for text region");
-            return -1;
-        }
-
-        /* 7.4.3.1.7 - decode symbol ID Huffman table */
-        /* this is actually part of the segment header, but it is more
-           convenient to handle it here */
-
-        /* parse and build the runlength code huffman table */
-        for (index = 0; index < 35; index++) {
-            runcodelengths[index].PREFLEN = jbig2_huffman_get_bits(hs, 4, &code);
-            if (code < 0)
-                goto cleanup1;
-            runcodelengths[index].RANGELEN = 0;
-            runcodelengths[index].RANGELOW = index;
-            jbig2_error(ctx, JBIG2_SEVERITY_DEBUG, segment->number, "  read runcode%d length %d", index, runcodelengths[index].PREFLEN);
-        }
-        runcodeparams.HTOOB = 0;
-        runcodeparams.lines = runcodelengths;
-        runcodeparams.n_lines = 35;
-        runcodes = jbig2_build_huffman_table(ctx, &runcodeparams);
-        if (runcodes == NULL) {
-            jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "error constructing symbol id runcode table!");
-            code = -1;
-            goto cleanup1;
-        }
-
-        /* decode the symbol id codelengths using the runlength table */
-        symcodelengths = jbig2_new(ctx, Jbig2HuffmanLine, SBNUMSYMS);
-        if (symcodelengths == NULL) {
-            jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "memory allocation failure reading symbol ID huffman table!");
-            code = -1;
-            goto cleanup1;
-        }
-        index = 0;
-        while (index < SBNUMSYMS) {
-            code = jbig2_huffman_get(hs, runcodes, &err);
-            if (err != 0 || code < 0 || code >= 35) {
-                jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "error reading symbol ID huffman table!");
-                code = err ? err : -1;
-                goto cleanup1;
-            }
-
-            if (code < 32) {
-                len = code;
-                range = 1;
-            } else {
-                if (code == 32) {
-                    if (index < 1) {
-                        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "error decoding symbol id table: run length with no antecedent!");
-                        code = -1;
-                        goto cleanup1;
-                    }
-                    len = symcodelengths[index - 1].PREFLEN;
-                } else {
-                    len = 0;    /* code == 33 or 34 */
-                }
-                err = 0;
-                if (code == 32)
-                    range = jbig2_huffman_get_bits(hs, 2, &err) + 3;
-                else if (code == 33)
-                    range = jbig2_huffman_get_bits(hs, 3, &err) + 3;
-                else if (code == 34)
-                    range = jbig2_huffman_get_bits(hs, 7, &err) + 11;
-                if (err < 0)
-                    goto cleanup1;
-            }
-            jbig2_error(ctx, JBIG2_SEVERITY_DEBUG, segment->number, "  read runcode%d at index %d (length %d range %d)", code, index, len, range);
-            if (index + range > SBNUMSYMS) {
-                jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number,
-                            "runlength extends %d entries beyond the end of symbol id table!", index + range - SBNUMSYMS);
-                range = SBNUMSYMS - index;
-            }
-            for (r = 0; r < range; r++) {
-                symcodelengths[index + r].PREFLEN = len;
-                symcodelengths[index + r].RANGELEN = 0;
-                symcodelengths[index + r].RANGELOW = index + r;
-            }
-            index += r;
-        }
-
-        if (index < SBNUMSYMS) {
-            jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, "runlength codes do not cover the available symbol set");
-        }
-        symcodeparams.HTOOB = 0;
-        symcodeparams.lines = symcodelengths;
-        symcodeparams.n_lines = SBNUMSYMS;
-
-        /* skip to byte boundary */
-        jbig2_huffman_skip(hs);
-
-        /* finally, construct the symbol id huffman table itself */
-        SBSYMCODES = jbig2_build_huffman_table(ctx, &symcodeparams);
-
-cleanup1:
-        jbig2_free(ctx->allocator, symcodelengths);
-        jbig2_release_huffman_table(ctx, runcodes);
-
-        if (SBSYMCODES == NULL) {
-            jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "could not construct Symbol ID huffman table!");
-            jbig2_huffman_free(ctx, hs);
-            return ((code != 0) ? code : -1);
-        }
     }
 
     /* 6.4.5 (1) */
@@ -278,14 +163,18 @@ cleanup1:
 
             /* (3b.iv) / 6.4.10 - decode the symbol id */
             if (params->SBHUFF) {
-                ID = jbig2_huffman_get(hs, SBSYMCODES, &code);
+                if (params->SBSYMCODES != NULL)
+                    ID = jbig2_huffman_get(hs, params->SBSYMCODES, &code);
+                else
+                    /* 6.5.8.2.3, fixed-length codes. */
+                    ID = jbig2_huffman_get_bits(hs, params->SBSYMCODELEN, &code);
             } else {
                 code = jbig2_arith_iaid_decode(params->IAID, as, (int *)&ID);
             }
             if (code < 0)
                 goto cleanup2;
-            if (ID >= SBNUMSYMS) {
-                code = jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "symbol id out of range! (%d/%d)", ID, SBNUMSYMS);
+            if (ID >= params->SBNUMSYMS) {
+                code = jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "symbol id out of range! (%d/%d)", ID, params->SBNUMSYMS);
                 goto cleanup2;
             }
 
@@ -351,9 +240,6 @@ cleanup1:
                 refimage = jbig2_image_new(ctx, IBO->width + RDW, IBO->height + RDH);
                 if (refimage == NULL) {
                     jbig2_image_release(ctx, IBO);
-                    if (params->SBHUFF) {
-                        jbig2_release_huffman_table(ctx, SBSYMCODES);
-                    }
                     return jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "couldn't allocate reference image");
                 }
                 jbig2_image_clear(ctx, refimage, 0x00);
@@ -462,10 +348,6 @@ cleanup1:
     /* 6.4.5 (4) */
 
 cleanup2:
-    if (params->SBHUFF) {
-        jbig2_release_huffman_table(ctx, SBSYMCODES);
-    }
-    jbig2_huffman_free(ctx, hs);
 
     return code;
 }
@@ -488,8 +370,10 @@ jbig2_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data
     int code = 0;
     Jbig2WordStream *ws = NULL;
     Jbig2ArithState *as = NULL;
+    Jbig2HuffmanState *hs = NULL;
     int table_index = 0;
     const Jbig2HuffmanParams *huffman_params = NULL;
+    int SBSYMCODELEN, SBNUMSYMS;
 
     /* 7.4.1 */
     if (segment->data_length < 17)
@@ -548,9 +432,6 @@ jbig2_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data
     offset += 4;
 
     if (params.SBHUFF) {
-        /* 7.4.3.1.5 - Symbol ID Huffman table */
-        /* ...this is handled in the segment body decoder */
-
         /* 7.4.3.1.6 - Other Huffman table selection */
         switch (huffman_flags & 0x0003) {
         case 0:                /* Table B.6 */
@@ -822,13 +703,131 @@ jbig2_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data
         goto cleanup2;
     }
 
-    if (!params.SBHUFF) {
-        int SBSYMCODELEN, index;
-        int SBNUMSYMS = 0;
+    {
+        int index;
+        SBNUMSYMS = 0;
 
         for (index = 0; index < n_dicts; index++) {
             SBNUMSYMS += dicts[index]->n_symbols;
         }
+        for (SBSYMCODELEN = 0; (1 << SBSYMCODELEN) < SBNUMSYMS; SBSYMCODELEN++) {
+        }
+    }
+    params.SBNUMSYMS = SBNUMSYMS;
+    params.SBSYMCODELEN = SBSYMCODELEN;
+
+    if (params.SBHUFF) {
+        /* 7.4.3.1.7 - Symbol ID Huffman table */
+        uint32_t index;
+        Jbig2HuffmanTable *runcodes = NULL;
+        Jbig2HuffmanParams runcodeparams;
+        Jbig2HuffmanLine runcodelengths[35];
+        Jbig2HuffmanLine *symcodelengths = NULL;
+        Jbig2HuffmanParams symcodeparams;
+        int err, len, range, r;
+
+        hs = jbig2_huffman_new(ctx, ws);
+        if (hs == NULL) {
+            jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, "failed to allocate storage for text region");
+            goto cleanup2;
+        }
+        /* 7.4.3.1.7 - decode symbol ID Huffman table */
+
+        /* parse and build the runlength code huffman table */
+        for (index = 0; index < 35; index++) {
+            runcodelengths[index].PREFLEN = jbig2_huffman_get_bits(hs, 4, &code);
+            if (code < 0)
+                goto cleanup5;
+            runcodelengths[index].RANGELEN = 0;
+            runcodelengths[index].RANGELOW = index;
+            jbig2_error(ctx, JBIG2_SEVERITY_DEBUG, segment->number, "  read runcode%d length %d", index, runcodelengths[index].PREFLEN);
+        }
+        runcodeparams.HTOOB = 0;
+        runcodeparams.lines = runcodelengths;
+        runcodeparams.n_lines = 35;
+        runcodes = jbig2_build_huffman_table(ctx, &runcodeparams);
+        if (runcodes == NULL) {
+            jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "error constructing symbol id runcode table!");
+            code = -1;
+            goto cleanup5;
+        }
+
+        /* decode the symbol id codelengths using the runlength table */
+        symcodelengths = jbig2_new(ctx, Jbig2HuffmanLine, SBNUMSYMS);
+        if (symcodelengths == NULL) {
+            jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "memory allocation failure reading symbol ID huffman table!");
+            code = -1;
+            goto cleanup5;
+        }
+        index = 0;
+        while (index < SBNUMSYMS) {
+            code = jbig2_huffman_get(hs, runcodes, &err);
+            if (err != 0 || code < 0 || code >= 35) {
+                jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "error reading symbol ID huffman table!");
+                code = err ? err : -1;
+                goto cleanup5;
+            }
+
+            if (code < 32) {
+                len = code;
+                range = 1;
+            } else {
+                if (code == 32) {
+                    if (index < 1) {
+                        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "error decoding symbol id table: run length with no antecedent!");
+                        code = -1;
+                        goto cleanup5;
+                    }
+                    len = symcodelengths[index-1].PREFLEN;
+                } else {
+                    len = 0; /* code == 33 or 34 */
+                }
+                err = 0;
+                if (code == 32)
+                    range = jbig2_huffman_get_bits(hs, 2, &err) + 3;
+                else if (code == 33)
+                    range = jbig2_huffman_get_bits(hs, 3, &err) + 3;
+                else if (code == 34)
+                    range = jbig2_huffman_get_bits(hs, 7, &err) + 11;
+                if (err < 0)
+                    goto cleanup5;
+            }
+            jbig2_error(ctx, JBIG2_SEVERITY_DEBUG, segment->number, "  read runcode%d at index %d (length %d range %d)", code, index, len, range);
+            if (index+range > SBNUMSYMS) {
+                jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, "runlength extends %d entries beyond the end of symbol id table!", index+range - SBNUMSYMS);
+                range = SBNUMSYMS - index;
+            }
+            for (r = 0; r < range; r++) {
+                symcodelengths[index+r].PREFLEN = len;
+                symcodelengths[index+r].RANGELEN = 0;
+                symcodelengths[index+r].RANGELOW = index + r;
+            }
+            index += r;
+        }
+
+        if (index < SBNUMSYMS) {
+            jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, "runlength codes do not cover the available symbol set");
+        }
+        symcodeparams.HTOOB = 0;
+        symcodeparams.lines = symcodelengths;
+        symcodeparams.n_lines = SBNUMSYMS;
+
+        /* skip to byte boundary */
+        jbig2_huffman_skip(hs);
+
+        /* finally, construct the symbol id huffman table itself */
+        params.SBSYMCODES = jbig2_build_huffman_table(ctx, &symcodeparams);
+
+cleanup5:
+        jbig2_free(ctx->allocator, symcodelengths);
+        jbig2_release_huffman_table(ctx, runcodes);
+
+        if (params.SBSYMCODES == NULL) {
+            jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "could not construct Symbol ID huffman table!");
+            if (code == 0) code = -1;
+            goto cleanup2;
+        }
+    } else {
 
         params.IADT = jbig2_arith_int_ctx_new(ctx);
         params.IAFS = jbig2_arith_int_ctx_new(ctx);
@@ -840,8 +839,6 @@ jbig2_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data
         }
 
         /* Table 31 */
-        for (SBSYMCODELEN = 0; (1 << SBSYMCODELEN) < SBNUMSYMS; SBSYMCODELEN++) {
-        }
         params.IAID = jbig2_arith_iaid_ctx_new(ctx, SBSYMCODELEN);
         params.IARI = jbig2_arith_int_ctx_new(ctx);
         params.IARDW = jbig2_arith_int_ctx_new(ctx);
@@ -857,7 +854,7 @@ jbig2_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data
 
     code = jbig2_decode_text_region(ctx, segment, &params,
                                     (const Jbig2SymbolDict * const *)dicts, n_dicts, image,
-                                    segment_data + offset, segment->data_length - offset, GR_stats, as, ws);
+                                    segment_data + offset, segment->data_length - offset, GR_stats, as, hs, ws);
     if (code < 0) {
         jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "failed to decode text region image data");
         goto cleanup4;
@@ -891,7 +888,6 @@ cleanup3:
         jbig2_arith_int_ctx_free(ctx, params.IAIT);
     }
     jbig2_free(ctx->allocator, as);
-    jbig2_word_stream_buf_free(ctx, ws);
 
 cleanup2:
     jbig2_free(ctx->allocator, GR_stats);
@@ -907,8 +903,11 @@ cleanup1:
         jbig2_release_huffman_table(ctx, params.SBHUFFRDW);
         jbig2_release_huffman_table(ctx, params.SBHUFFRDH);
         jbig2_release_huffman_table(ctx, params.SBHUFFRSIZE);
+        jbig2_release_huffman_table(ctx, params.SBSYMCODES);
+        jbig2_huffman_free(ctx, hs);
     }
     jbig2_free(ctx->allocator, dicts);
+    jbig2_word_stream_buf_free(ctx, ws);
 
     return code;
 

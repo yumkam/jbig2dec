@@ -41,9 +41,9 @@ typedef struct {
     uint32_t SBNUMINSTANCES;
     int LOGSBSTRIPS;
     int SBSTRIPS;
-    /* int SBNUMSYMS; */
-    /* SBSYMCODES */
-    /* SBSYMCODELEN */
+    int SBNUMSYMS;
+    Jbig2HuffmanTable *SBSYMCODES;
+    int SBSYMCODELEN;
     /* SBSYMS */
     Jbig2HuffmanTable *SBHUFFFS;
     Jbig2HuffmanTable *SBHUFFDS;
@@ -71,4 +71,7 @@ int
 jbig2_decode_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment,
                          const Jbig2TextRegionParams *params,
                          const Jbig2SymbolDict *const *dicts, const int n_dicts,
-                         Jbig2Image *image, const byte *data, const size_t size, Jbig2ArithCx *GR_stats, Jbig2ArithState *as, Jbig2WordStream *ws);
+                         Jbig2Image *image, const byte *data, const size_t size,
+                         Jbig2ArithCx *GR_stats,
+                         Jbig2ArithState *as, Jbig2HuffmanState *hs,
+                         Jbig2WordStream *ws);
