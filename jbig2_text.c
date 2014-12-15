@@ -697,6 +697,7 @@ jbig2_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data
     }
 
     /* 7.4.3.2 (3) */
+    if (params.SBREFINE)
     {
         int stats_size = params.SBRTEMPLATE ? 1 << 10 : 1 << 13;
 

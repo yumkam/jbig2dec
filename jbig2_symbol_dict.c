@@ -1023,6 +1023,7 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
         jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, "segment marks bitmap coding context as used (NYI)");
         goto cleanup;
     } else {
+        if (!params.SDREFAGG && !params.SDHUFF) {
         int stats_size = params.SDTEMPLATE == 0 ? 65536 : params.SDTEMPLATE == 1 ? 8192 : 1024;
 
         GB_stats = jbig2_new(ctx, Jbig2ArithCx, stats_size);
@@ -1031,7 +1032,10 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
             goto cleanup;
         }
         memset(GB_stats, 0, stats_size);
+        }
 
+        if (params.SDREFAGG) {
+            int
         stats_size = params.SDRTEMPLATE ? 1 << 10 : 1 << 13;
         GR_stats = jbig2_new(ctx, Jbig2ArithCx, stats_size);
         if (GR_stats == NULL) {
@@ -1040,6 +1044,7 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
             goto cleanup;
         }
         memset(GR_stats, 0, stats_size);
+        }
     }
 
     segment->result = (void *)jbig2_decode_symbol_dict(ctx, segment, &params, segment_data + offset, segment->data_length - offset, GB_stats, GR_stats);
