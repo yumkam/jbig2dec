@@ -440,8 +440,7 @@ jbig2_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data
 
         if (huffman_flags & 0x8000)
             jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, "reserved bit 15 of text region huffman flags is not zero");
-    } else {                    /* arithmetic coding */
-
+    }
         /* 7.4.3.1.3 */
         if ((params.SBREFINE) && !(params.SBRTEMPLATE)) {
             params.sbrat[0] = segment_data[offset];
@@ -450,7 +449,6 @@ jbig2_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data
             params.sbrat[3] = segment_data[offset + 3];
             offset += 4;
         }
-    }
 
     /* 7.4.3.1.4 */
     params.SBNUMINSTANCES = jbig2_get_uint32(segment_data + offset);
