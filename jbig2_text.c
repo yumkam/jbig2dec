@@ -347,7 +347,6 @@ jbig2_decode_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment,
 #endif
             code = jbig2_image_compose(ctx, image, IB, x, y, params->SBCOMBOP);
             if (code < 0) {
-                jbig2_image_release(ctx, IB);
                 goto cleanup2;
             }
 
@@ -362,12 +361,14 @@ jbig2_decode_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment,
             NINSTANCES++;
 
             jbig2_image_release(ctx, IB);
+            IB = NULL;
         }
         /* end strip */
     }
     /* 6.4.5 (4) */
 
 cleanup2:
+    jbig2_image_release(ctx, IB);
     if (params->SBHUFF) {
         jbig2_free(ctx->allocator, as);
         jbig2_word_stream_buf_free(ctx, subws);
