@@ -236,6 +236,7 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
     uint32_t *SDNEWSYMWIDTHS = NULL;
     int SBSYMCODELEN = 0;
     Jbig2WordStream *ws = NULL;
+    Jbig2WordStream *subws = NULL;
     Jbig2HuffmanState *hs = NULL;
     Jbig2HuffmanTable *SDHUFFRDX = NULL;
     Jbig2HuffmanTable *SBHUFFRSIZE = NULL;
@@ -269,6 +270,7 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
         for (SBSYMCODELEN = 0; ((int64_t) 1 << SBSYMCODELEN) < tmp; SBSYMCODELEN++) {
         }
     }
+    if (!params->SDHUFF) {
     as = jbig2_arith_new(ctx, ws);
     if (as == NULL) {
         jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, "failed to allocate as in jbig2_decode_symbol_dict");
@@ -276,7 +278,6 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
         return NULL;
     }
 
-    if (!params->SDHUFF) {
         IADH = jbig2_arith_int_ctx_new(ctx);
         IADW = jbig2_arith_int_ctx_new(ctx);
         IAEX = jbig2_arith_int_ctx_new(ctx);
@@ -395,6 +396,7 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
                     int sdat_bytes;
                     Jbig2Image *image;
 
+                    /* assert(!params->SDHUFF); */
                     /* Table 16 */
                     region_params.MMR = 0;
                     region_params.GBTEMPLATE = params->SDTEMPLATE;
@@ -570,22 +572,38 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
                         rparams.reference = (ID < ninsyms) ? params->SDINSYMS->glyphs[ID] : SDNEWSYMS->glyphs[ID - ninsyms];
                         /* SumatraPDF: fail on missing glyphs */
                         if (rparams.reference == NULL) {
-                            code = jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "missing glyph %d/%d!", ID, ninsyms);
+                            code = jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "missing glyph %d/%d [+%d]!", ID, ninsyms, NSYMSDECODED);
                             goto cleanup4;
                         }
                         rparams.DX = RDX;
                         rparams.DY = RDY;
                         rparams.TPGRON = 0;
                         memcpy(rparams.grat, params->sdrat, 4);
+                        if (params->SDHUFF) {
+                            /* assert(subws == NULL); */
+                            if (size - jbig2_huffman_offset(hs) < BMSIZE) {
+                                jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "not enough data for decoding (%d/%d)", BMSIZE, size - jbig2_huffman_offset(hs));
+                                goto cleanup4;
+                            }
+                            subws = jbig2_word_stream_buf_new(ctx, data + jbig2_huffman_offset(hs), BMSIZE);
+                            /* assert(as == NULL); */
+                            as = jbig2_arith_new(ctx, subws);
+                            if (as == NULL) {
+                                code = jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "failed to allocate as in jbig2_decode_symbol_dict");
+                                goto cleanup4;
+                            }
+                        }
                         code = jbig2_decode_refinement_region(ctx, segment, &rparams, as, image, GR_stats);
                         if (code < 0)
                             goto cleanup4;
 
                         /* 6.5.8.2.2 (7) */
                         if (params->SDHUFF) {
-                            if (BMSIZE == 0)
-                                BMSIZE = image->height * image->stride;
                             jbig2_huffman_advance(hs, BMSIZE);
+                            jbig2_free(ctx->allocator, as);
+                            as = NULL;
+                            jbig2_word_stream_buf_free(ctx, subws);
+                            subws = NULL;
                         }
                     }
                 }
@@ -794,6 +812,7 @@ cleanup2:
 
 cleanup1:
     jbig2_word_stream_buf_free(ctx, ws);
+    jbig2_word_stream_buf_free(ctx, subws);
     jbig2_free(ctx->allocator, as);
     jbig2_arith_int_ctx_free(ctx, IADH);
     jbig2_arith_int_ctx_free(ctx, IADW);

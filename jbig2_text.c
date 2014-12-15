@@ -76,12 +76,14 @@ jbig2_decode_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment,
     bool first_symbol;
     uint32_t index;
     Jbig2Image *IB = NULL;
+    Jbig2WordStream *subws = NULL;
     int code = 0;
     int RI;
 
     jbig2_error(ctx, JBIG2_SEVERITY_DEBUG, segment->number, "symbol list contains %d glyphs in %d dictionaries", params->SBNUMSYMS, n_dicts);
 
     if (params->SBHUFF) {
+        as = NULL;
         jbig2_error(ctx, JBIG2_SEVERITY_DEBUG, segment->number, "huffman coded text region");
     }
 
@@ -251,6 +253,20 @@ jbig2_decode_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment,
                 rparams.DY = (RDH >> 1) + RDY;
                 rparams.TPGRON = 0;
                 memcpy(rparams.grat, params->sbrat, 4);
+                if (params->SBHUFF) {
+                    /* assert(subws == NULL); */
+                    if (size - jbig2_huffman_offset(hs) < BMSIZE) {
+                        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "not enough data for decoding (%d/%d)", BMSIZE, size - jbig2_huffman_offset(hs));
+                        goto cleanup2;
+                    }
+                    subws = jbig2_word_stream_buf_new(ctx, data + jbig2_huffman_offset(hs), BMSIZE);
+                    /* assert(as == NULL); */
+                    as = jbig2_arith_new(ctx, subws);
+                    if (as == NULL) {
+                        code = jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "failed to allocate as in text region");
+                        goto cleanup2;
+                    }
+                }
                 code = jbig2_decode_refinement_region(ctx, segment, &rparams, as, refimage, GR_stats);
                 if (code < 0) {
                     jbig2_image_release(ctx, refimage);
@@ -263,6 +279,10 @@ jbig2_decode_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment,
                 /* 6.4.11 (7) */
                 if (params->SBHUFF) {
                     jbig2_huffman_advance(hs, BMSIZE);
+                    jbig2_free(ctx->allocator, as);
+                    as = NULL;
+                    jbig2_word_stream_buf_free(ctx, subws);
+                    subws = NULL;
                 }
 
             }
@@ -348,6 +368,10 @@ jbig2_decode_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment,
     /* 6.4.5 (4) */
 
 cleanup2:
+    if (params->SBHUFF) {
+        jbig2_free(ctx->allocator, as);
+        jbig2_word_stream_buf_free(ctx, subws);
+    }
 
     return code;
 }
@@ -697,12 +721,6 @@ jbig2_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data
         goto cleanup2;
     }
 
-    as = jbig2_arith_new(ctx, ws);
-    if (as == NULL) {
-        code = jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "couldn't allocate as in text region image");
-        goto cleanup2;
-    }
-
     {
         int index;
         SBNUMSYMS = 0;
@@ -828,7 +846,11 @@ cleanup5:
             goto cleanup2;
         }
     } else {
-
+        as = jbig2_arith_new(ctx, ws);
+        if (as == NULL) {
+            code = jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "couldn't allocate as in text region image");
+            goto cleanup2;
+        }
         params.IADT = jbig2_arith_int_ctx_new(ctx);
         params.IAFS = jbig2_arith_int_ctx_new(ctx);
         params.IADS = jbig2_arith_int_ctx_new(ctx);
