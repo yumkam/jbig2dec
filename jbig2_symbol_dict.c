@@ -482,11 +482,11 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
                                 tparams->SBHUFFFS = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_F);    /* Table B.6 */
                                 tparams->SBHUFFDS = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_H);    /* Table B.8 */
                                 tparams->SBHUFFDT = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_K);    /* Table B.11 */
-                                tparams->SBHUFFRDW = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_O);   /* Table B.15 */
-                                tparams->SBHUFFRDH = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_O);   /* Table B.15 */
-                                tparams->SBHUFFRDX = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_O);   /* Table B.15 */
-                                tparams->SBHUFFRDY = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_O);   /* Table B.15 */
-                                tparams->SBHUFFRSIZE = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_A); /* Table B.1 */
+                                tparams->SBHUFFRDW = /* Table B.15 */
+                                tparams->SBHUFFRDH = /* Table B.15 */
+                                tparams->SBHUFFRDX = /* Table B.15 */
+                                tparams->SBHUFFRDY = SDHUFFRDX; /* Table B.15 */
+                                tparams->SBHUFFRSIZE = SBHUFFRSIZE; /* Table B.1 */
                             }
                             tparams->SBHUFF = params->SDHUFF;
                             tparams->SBREFINE = 1;
@@ -787,11 +787,13 @@ cleanup4:
             jbig2_release_huffman_table(ctx, tparams->SBHUFFFS);
             jbig2_release_huffman_table(ctx, tparams->SBHUFFDS);
             jbig2_release_huffman_table(ctx, tparams->SBHUFFDT);
+#if 0 /* aliases SDHUFFRDX and SBHUFFRSIZE */
             jbig2_release_huffman_table(ctx, tparams->SBHUFFRDX);
             jbig2_release_huffman_table(ctx, tparams->SBHUFFRDY);
             jbig2_release_huffman_table(ctx, tparams->SBHUFFRDW);
             jbig2_release_huffman_table(ctx, tparams->SBHUFFRDH);
             jbig2_release_huffman_table(ctx, tparams->SBHUFFRSIZE);
+#endif                
         }
         jbig2_free(ctx->allocator, tparams);
     }
