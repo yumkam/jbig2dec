@@ -434,7 +434,7 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
 
                     jbig2_error(ctx, JBIG2_SEVERITY_DEBUG, segment->number, "aggregate symbol coding (%d instances)", REFAGGNINST);
 
-                    if (REFAGGNINST > 1) {
+                    if ((ctx->options & JBIG2_OPTIONS_PRE_STANDARD) == JBIG2_OPTIONS_PRE_STANDARD || REFAGGNINST > 1) {
                         Jbig2Image *image;
                         int i;
 

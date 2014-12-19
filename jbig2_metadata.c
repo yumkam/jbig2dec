@@ -147,6 +147,15 @@ jbig2_comment_ascii(Jbig2Ctx *ctx, Jbig2Segment *segment, const uint8_t *segment
         if (!s)
             goto too_short;
         s++;
+	/* XXX hack to recognize files encoded with pre-standard encoder */
+#define PRE_STANDARD_KEY1 "Source\000Power JBIG-2 Encoder - The University of British Columba and Image Power Inc."
+#define PRE_STANDARD_KEY2 "Version\0001.0.0"
+	if (s - key == sizeof(PRE_STANDARD_KEY1) &&
+	    memcmp(key, PRE_STANDARD_KEY1, sizeof(PRE_STANDARD_KEY1)) == 0)
+	    ctx->options |= JBIG2_OPTIONS_PRE_STANDARD_BIT1;
+	else if (s - key == sizeof(PRE_STANDARD_KEY2) &&
+		 memcmp(key, PRE_STANDARD_KEY2, sizeof(PRE_STANDARD_KEY2)) == 0)
+	    ctx->options |= JBIG2_OPTIONS_PRE_STANDARD_BIT2;
         if (jbig2_metadata_add(ctx, comment, key, value - key, value, s - value) < 0) {
             jbig2_metadata_free(ctx, comment);
             return -1;

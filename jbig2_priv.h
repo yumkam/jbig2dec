@@ -49,6 +49,11 @@ typedef uint8_t byte;
 #define FALSE 0
 #endif
 
+/* XXX hack */
+#define JBIG2_OPTIONS_PRE_STANDARD_BIT1 (1<<20)
+#define JBIG2_OPTIONS_PRE_STANDARD_BIT2 (2<<20)
+#define JBIG2_OPTIONS_PRE_STANDARD (3<<20)
+
 #ifndef NULL
 #define NULL ((void*)0)
 #endif
