@@ -101,6 +101,8 @@ jbig2_sd_new(Jbig2Ctx *ctx, int n_symbols)
     if (new != NULL) {
         new->glyphs = jbig2_new(ctx, Jbig2Image *, n_symbols);
         new->n_symbols = n_symbols;
+        new->flags = 0;
+        new->saved_stats = NULL;
     } else {
         jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "unable to allocate new empty symbol dict");
         return NULL;
@@ -129,6 +131,7 @@ jbig2_sd_release(Jbig2Ctx *ctx, Jbig2SymbolDict *dict)
         if (dict->glyphs[i])
             jbig2_image_release(ctx, dict->glyphs[i]);
     jbig2_free(ctx->allocator, dict->glyphs);
+    jbig2_free(ctx->allocator, dict->saved_stats);
     jbig2_free(ctx->allocator, dict);
 }
 
@@ -157,6 +160,23 @@ jbig2_sd_count_referred(Jbig2Ctx *ctx, Jbig2Segment *segment)
     }
 
     return (n_dicts);
+}
+
+/* returns last referred symbol dictionary segment */
+static Jbig2SymbolDict *
+jbig2_sd_last_referred(Jbig2Ctx *ctx, Jbig2Segment *segment)
+{
+    int index;
+    Jbig2Segment *rsegment;
+
+    for (index = segment->referred_to_segment_count; index-- > 0;) {
+        rsegment = jbig2_find_segment(ctx, segment->referred_to_segments[index]);
+        if (rsegment && ((rsegment->flags & 63) == 0) && rsegment->result) {
+            return ((Jbig2SymbolDict *)rsegment->result);
+        }
+    }
+
+    return NULL;
 }
 
 /* return an array of pointers to symbol dictionaries referred to by the given segment */
@@ -853,6 +873,7 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
     int offset;
     Jbig2ArithCx *GB_stats = NULL;
     Jbig2ArithCx *GR_stats = NULL;
+    void *saved_stats = NULL;
     int table_index = 0;
     const Jbig2HuffmanParams *huffman_params;
 
@@ -1022,9 +1043,25 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
 
     /* 7.4.2.2 (3, 4) */
     if (flags & 0x0100) {
-        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, "segment marks bitmap coding context as used (NYI)");
-        goto cleanup;
-    } else {
+        Jbig2SymbolDict *last_referred = jbig2_sd_last_referred(ctx, segment);
+        const uint16_t mask = (1<<0)|(1<<1)|(3<<10)|(1<<12);
+        /* SDHUFF, SDREFAGG, SDTEMPLATE, SDRTEMPLATE */
+        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, "Untested 'Bitmap coding context used' feature is used, please send samples and/or test results.");
+        if (last_referred == NULL) {
+            jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "'Bitmap coding context used' is set, but referred segment is not found.");
+        } else if((last_referred->flags & (1<<9)) == 0) {
+            jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "'Bitmap coding context used' is set, but referred segment's 'Bitmap coding context retained' is not set.");
+        } else if(((last_referred->flags ^ flags) & mask) != 0) {
+            jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "'Bitmap coding context used' is set, but referred segment's flags mismatches this segment flags (SDHUFF: %d vs %d, SDREFAGG: %d vs %d, SDTEMPLATE: %d vs %d).",
+                    (last_referred->flags >> 0) & 1, params.SDHUFF,
+                    (last_referred->flags >> 1) & 1, params.SDREFAGG,
+                    (last_referred->flags >> 10) & 3, params.SDTEMPLATE,
+                    (last_referred->flags >> 12) & 1, params.SDRTEMPLATE);
+        } else {
+            saved_stats = last_referred->saved_stats;
+        }
+        /* XXX standard also says that sdrat and sdat must match, but we don't verify that */
+    }
         if (!params.SDREFAGG && !params.SDHUFF) {
         int stats_size = params.SDTEMPLATE == 0 ? 65536 : params.SDTEMPLATE == 1 ? 8192 : 1024;
 
@@ -1033,6 +1070,12 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
             jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "failed to allocate GB_stats in jbig2_symbol_dictionary");
             goto cleanup;
         }
+        if (saved_stats && !params.SDREFAGG)
+            /* as SDREFAGG and SDTEMPLATE are same as referred segments flag,
+             * saved_stats contains referred segment GB_stats of same size
+             */
+            memcpy(GB_stats, saved_stats, stats_size);
+        else
         memset(GB_stats, 0, stats_size);
         }
 
@@ -1045,9 +1088,14 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
             jbig2_free(ctx->allocator, GB_stats);
             goto cleanup;
         }
+        if (saved_stats && params.SDREFAGG)
+            /* as SDREFAGG and SDRTEMPLATE are same as referred segments flag,
+             * saved_stats contains referred segment GR_stats of same size
+             */
+            memcpy(GR_stats, saved_stats, stats_size);
+        else
         memset(GR_stats, 0, stats_size);
         }
-    }
 
     segment->result = (void *)jbig2_decode_symbol_dict(ctx, segment, &params, segment_data + offset, segment->data_length - offset, GB_stats, GR_stats);
 #ifdef DUMP_SYMDICT
@@ -1056,11 +1104,11 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
 #endif
 
     /* 7.4.2.2 (7) */
-    if (flags & 0x0200) {
-        /* todo: retain GB_stats, GR_stats */
-        jbig2_free(ctx->allocator, GR_stats);
-        jbig2_free(ctx->allocator, GB_stats);
-        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, "segment marks bitmap coding context as retained (NYI)");
+    if ((flags & 0x0200) && segment->result) {
+        Jbig2SymbolDict *res = (Jbig2SymbolDict *)segment->result;
+        res->flags = flags;
+        res->saved_stats = params.SDREFAGG ? GR_stats : GB_stats;
+        /* assert((!params.SDREFAGG ? GR_stats : GB_stats) == NULL); */
     } else {
         jbig2_free(ctx->allocator, GR_stats);
         jbig2_free(ctx->allocator, GB_stats);

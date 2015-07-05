@@ -23,6 +23,8 @@
 typedef struct {
     uint32_t n_symbols;
     Jbig2Image **glyphs;
+    void *saved_stats; /* SDREFAGG ? GR_stats : GB_stats */
+    uint16_t flags;
 } Jbig2SymbolDict;
 
 /* decode a symbol dictionary segment and store the results */
