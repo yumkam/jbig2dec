@@ -427,7 +427,7 @@ jbig2_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data
     params.SBDSOFFSET = (flags & 0x7C00) >> 10;
     if (params.SBDSOFFSET > 0x0f)
         params.SBDSOFFSET -= 0x20;
-    params.SBRTEMPLATE = flags & 0x8000;
+    params.SBRTEMPLATE = (flags & 0x8000) >> 15;
 
     if (params.SBDSOFFSET) {
         jbig2_error(ctx, JBIG2_SEVERITY_DEBUG, segment->number, "text region has SBDSOFFSET %d", params.SBDSOFFSET);
