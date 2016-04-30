@@ -768,6 +768,33 @@ jbig2_find_changing_element_of_color(const byte *line, int x, int w, int color)
     return x;
 }
 
+#if defined(__PIC__)
+static void
+jbig2_set_bits(byte *line, int x0, int x1)
+{
+    int a0, a1, b0, b1, a;
+    byte lm, rm;
+
+    a0 = x0 >> 3;
+    a1 = x1 >> 3;
+
+    b0 = x0 & 7;
+    b1 = x1 & 7;
+
+    lm = 0xff >> b0;
+    rm = -(0x100 >> b1);
+
+    if (a0 == a1) {
+        line[a0] |= lm & rm;
+    } else {
+        line[a0] |= lm;
+        for (a = a0 + 1; a < a1; a++)
+            line[a] = 0xFF;
+        if (b1)
+            line[a1] |= rm;
+    }
+}
+#else
 static const byte lm[8] = { 0xFF, 0x7F, 0x3F, 0x1F, 0x0F, 0x07, 0x03, 0x01 };
 static const byte rm[8] = { 0x00, 0x80, 0xC0, 0xE0, 0xF0, 0xF8, 0xFC, 0xFE };
 
@@ -792,6 +819,7 @@ jbig2_set_bits(byte *line, int x0, int x1)
             line[a1] |= rm[b1];
     }
 }
+#endif
 
 static int
 jbig2_decode_get_code(Jbig2MmrCtx *mmr, const mmr_table_node *table, int initial_bits)
