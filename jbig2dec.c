@@ -63,6 +63,7 @@ typedef struct {
     SHA1_CTX *hash_ctx;
     char *output_file;
     jbig2dec_format output_format;
+    int multipage;
 } jbig2dec_params_t;
 
 static int print_version(void);
@@ -140,13 +141,14 @@ parse_options(int argc, char *argv[], jbig2dec_params_t *params)
         {"hash", 0, NULL, 'm'},
         {"output", 1, NULL, 'o'},
         {"format", 1, NULL, 't'},
+        {"multipage", 1, NULL, 'p'},
         {NULL, 0, NULL, 0}
     };
     int option_idx = 1;
     int option;
 
     while (1) {
-        option = getopt_long(argc, argv, "Vh?qv:do:t:", long_options, &option_idx);
+        option = getopt_long(argc, argv, "Vh?qv:do:t:p:", long_options, &option_idx);
         if (option == -1)
             break;
 
@@ -181,6 +183,10 @@ parse_options(int argc, char *argv[], jbig2dec_params_t *params)
             params->hash = 1;
             break;
         case 'o':
+            params->output_file = strdup(optarg);
+            break;
+        case 'p':
+            params->multipage = 1;
             params->output_file = strdup(optarg);
             break;
         case 't':
@@ -225,7 +231,9 @@ print_usage(void)
             "       --hash      print a hash of the decoded document\n"
             "    -o <file>      send decoded output to <file>\n"
             "                   Defaults to the the input with a different\n"
-            "                   extension. Pass '-' for stdout.\n" "    -t <type>      force a particular output file format\n"
+            "                   extension. Pass '-' for stdout.\n"
+            "    -p <template>  multipage output using printf template for file name\n"
+            "    -t <type>      force a particular output file format\n"
 #ifdef HAVE_LIBPNG
             "                   supported options are 'png' and 'pbm'\n"
 #else
@@ -343,6 +351,32 @@ write_page_image(jbig2dec_params_t *params, Jbig2Image *image)
             fprintf(stderr, "unsupported output format.\n");
             return 1;
         }
+    } else if (params->multipage) {
+        char output_file[1024];
+        int ret;
+
+        /* multipage is reused as both flag and page count */
+        ret = snprintf(output_file, sizeof(output_file),
+                params->output_file, params->multipage++);
+        if (ret < 0 || ret >= sizeof(output_file)) {
+            fprintf(stderr, "failed to format output file name\n");
+            return 1;
+        }
+        if (params->verbose > 1)
+            fprintf(stderr, "saving decoded page as '%s'\n", output_file);
+        switch (params->output_format) {
+#ifdef HAVE_LIBPNG
+            case jbig2dec_format_png:
+                jbig2_image_write_png_file(image, output_file);
+                break;
+#endif
+            case jbig2dec_format_pbm:
+                jbig2_image_write_pbm_file(image, output_file);
+                break;
+            default:
+                fprintf(stderr, "unsupported output format.\n");
+                return 1;
+        }
     } else {
         if (params->verbose > 1)
             fprintf(stderr, "saving decoded page as '%s'\n", params->output_file);
@@ -382,6 +416,49 @@ write_document_hash(jbig2dec_params_t *params)
     return 0;
 }
 
+static int
+validate_multipage_template(const char *format)
+{
+    const char *p = format;
+    /* Validate format string. */
+    for (; (p = strchr(p, '%')); p++)
+        /* Skip over escaped %' */
+        if (*++p != '%') break;
+    if (p == NULL)
+        p = format + strlen(format);
+    for (;;) {
+        /* parse one integer format string:
+         * %#?[-+]?0?([1-9][0-9]+)?(.[0-9]+)?[duiox]
+         */
+        switch(*p++) {
+        case '0' ... '9':
+        case '#': case '-': case '+': case ' ': case '\'':
+        case '.':
+#if defined(__GLIBC_PREREQ) /* don't combine conditions! */
+#if __GLIBC_PREREQ(2, 2)
+        case 'I':
+#endif
+#endif
+            /* skip known flags and precision */
+            /* some combinations are maybe illegal, but should not trigger crash */
+            break;
+        case 'd': case 'u': case 'i': case 'o': case 'x': case 'X':
+            /* Accept integer formats. */
+            /* Check remaining template: */
+            for (++p; (p = strchr(p, '%')); p++)
+                if (*++p != '%')
+                    break;
+            if (p == NULL) /* rest of template contains only escaped % */
+                return 0;
+            /* fallthrough */
+        default:
+            /* Anything unexpected */
+            fprintf(stderr, "Illegal format string (only single integer printf(3) template allowed): '%s'\n", format);
+            return -1;
+        }
+    }
+}
+
 int
 main(int argc, char **argv)
 {
@@ -397,8 +474,12 @@ main(int argc, char **argv)
     params.hash = 0;
     params.output_file = NULL;
     params.output_format = jbig2dec_format_none;
+    params.multipage = 0;
 
     filearg = parse_options(argc, argv, &params);
+
+    if (params.multipage && validate_multipage_template(params.output_file))
+        return 1;
 
     if (params.hash)
         hash_init(&params);
