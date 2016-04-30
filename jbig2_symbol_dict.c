@@ -1046,6 +1046,7 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
         Jbig2SymbolDict *last_referred = jbig2_sd_last_referred(ctx, segment);
         const uint16_t mask = (1<<0)|(1<<1)|(3<<10)|(1<<12);
         /* SDHUFF, SDREFAGG, SDTEMPLATE, SDRTEMPLATE */
+
         jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, "Untested 'Bitmap coding context used' feature is used, please send samples and/or test results.");
         if (last_referred == NULL) {
             jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "'Bitmap coding context used' is set, but referred segment is not found.");
@@ -1062,7 +1063,7 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
         }
         /* XXX standard also says that sdrat and sdat must match, but we don't verify that */
     }
-        if (!params.SDREFAGG && !params.SDHUFF) {
+    if (!params.SDREFAGG && !params.SDHUFF) {
         int stats_size = params.SDTEMPLATE == 0 ? 65536 : params.SDTEMPLATE == 1 ? 8192 : 1024;
 
         GB_stats = jbig2_new(ctx, Jbig2ArithCx, stats_size);
@@ -1076,12 +1077,12 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
              */
             memcpy(GB_stats, saved_stats, stats_size);
         else
-        memset(GB_stats, 0, stats_size);
-        }
+            memset(GB_stats, 0, stats_size);
+    }
 
-        if (params.SDREFAGG) {
-            int
-        stats_size = params.SDRTEMPLATE ? 1 << 10 : 1 << 13;
+    if (params.SDREFAGG) {
+        int stats_size = params.SDRTEMPLATE ? 1 << 10 : 1 << 13;
+
         GR_stats = jbig2_new(ctx, Jbig2ArithCx, stats_size);
         if (GR_stats == NULL) {
             jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "failed to allocate GR_stats in jbig2_symbol_dictionary");
@@ -1094,8 +1095,8 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
              */
             memcpy(GR_stats, saved_stats, stats_size);
         else
-        memset(GR_stats, 0, stats_size);
-        }
+            memset(GR_stats, 0, stats_size);
+    }
 
     segment->result = (void *)jbig2_decode_symbol_dict(ctx, segment, &params, segment_data + offset, segment->data_length - offset, GB_stats, GR_stats);
 #ifdef DUMP_SYMDICT
