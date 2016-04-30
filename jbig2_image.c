@@ -219,7 +219,7 @@ jbig2_image_compose(Jbig2Ctx *ctx, Jbig2Image *dst, Jbig2Image *src, int x, int 
     uint8_t *d, *dd;
     uint8_t mask, rightmask;
 
-    if (op != JBIG2_COMPOSE_OR) {
+    if (op != JBIG2_COMPOSE_OR && op != JBIG2_COMPOSE_REPLACE) {
         /* hand off the the general routine */
         return jbig2_image_compose_unopt(ctx, dst, src, x, y, op);
     }
@@ -237,6 +237,10 @@ jbig2_image_compose(Jbig2Ctx *ctx, Jbig2Image *dst, Jbig2Image *src, int x, int 
         ss += (-x) >> 3;
         w += x;
         x = 0;
+    }
+    if (op == JBIG2_COMPOSE_REPLACE && (x & 7)) {
+        /* NYI, too confusing */
+        return jbig2_image_compose_unopt(ctx, dst, src, x, y, op);
     }
     if (y < 0) {
         ss += -y*src->stride;
@@ -275,6 +279,32 @@ jbig2_image_compose(Jbig2Ctx *ctx, Jbig2Image *dst, Jbig2Image *src, int x, int 
     d = dd = dst->data + y * dst->stride + leftbyte;
     if (d < dst->data || leftbyte > dst->stride || h * dst->stride < 0 || d - leftbyte + h * dst->stride > dst->data + dst->height * dst->stride) {
         return jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "preventing heap overflow in jbig2_image_compose");
+    }
+    if (op == JBIG2_COMPOSE_REPLACE) {
+        uint8_t dmask;
+        if (leftbyte == rightbyte) {
+            mask = 0x100 - (0x100 >> w);
+            dmask = ~(mask >> shift);
+            for (j = 0; j < h; j++) {
+                *d = (*d & dmask) | ((*s & mask) >> shift);
+                d += dst->stride;
+                s += src->stride;
+            }
+        } else if (shift == 0) {
+            rightmask = (w & 7) ? 0x100 - (1 << (8 - (w & 7))) : 0xFF;
+            for (j = 0; j < h; j++) {
+                for (i = leftbyte; i < rightbyte; i++)
+                    *d++ = *s++;
+                *d = (*d & ~rightmask) | (*s & rightmask);
+                d = (dd += dst->stride);
+                s = (ss += src->stride);
+            }
+        } else {
+            /* XXX NYI, should be rejected above */
+            return jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1,
+                    "jbig2_image_compose(REPLACE): NYI");
+        }
+        return 0;
     }
     if (leftbyte == rightbyte) {
         mask = 0x100 - (0x100 >> w);
