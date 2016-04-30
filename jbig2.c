@@ -54,12 +54,19 @@ static Jbig2Allocator jbig2_default_allocator = {
     jbig2_default_realloc
 };
 
+#define SIZE_MAX_SQRT_P1 (((size_t)1) << (sizeof(size_t)*8/2))
 void *
 jbig2_alloc(Jbig2Allocator *allocator, size_t size, size_t num)
 {
     /* check for integer multiplication overflow */
+    if ((size|num) >= SIZE_MAX_SQRT_P1) {
+        /*
+         * When both size and num are less than SIZE_MAX_SQRT_P1,
+         * their multiply can never overflow
+         */
     if (num > 0 && size >= (size_t) - 0x100 / num)
         return NULL;
+    }
     return allocator->alloc(allocator, size * num);
 }
 
@@ -446,7 +453,13 @@ void *
 jbig2_realloc(Jbig2Allocator *allocator, void *p, size_t size, size_t num)
 {
     /* check for integer multiplication overflow */
+    if ((size|num) >= SIZE_MAX_SQRT_P1) {
+        /*
+         * When both size and num are less than SIZE_MAX_SQRT_P1,
+         * their multiply can never overflow
+         */
     if (num > 0 && size >= (size_t) - 0x100 / num)
         return NULL;
+    }
     return allocator->realloc(allocator, p, size * num);
 }
