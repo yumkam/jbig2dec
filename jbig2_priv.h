@@ -106,7 +106,11 @@ uint16_t jbig2_get_uint16(const byte *bptr);
 int16_t jbig2_get_int16(const byte *buf);
 
 /* dynamic memory management */
-void *jbig2_alloc(Jbig2Allocator *allocator, size_t size, size_t num);
+void *
+#if defined(__GNUC__)
+__attribute__((__malloc__))
+#endif
+jbig2_alloc(Jbig2Allocator *allocator, size_t size, size_t num);
 
 void jbig2_free(Jbig2Allocator *allocator, void *p);
 
@@ -116,7 +120,11 @@ void *jbig2_realloc(Jbig2Allocator *allocator, void *p, size_t size, size_t num)
 
 #define jbig2_renew(ctx, p, t, size) ((t *)jbig2_realloc(ctx->allocator, (p), size, sizeof(t)))
 
-int jbig2_error(Jbig2Ctx *ctx, Jbig2Severity severity, int32_t seg_idx, const char *fmt, ...);
+int
+#if defined(__GNUC__)
+__attribute__((__format__ (__printf__, 4, 5)))
+#endif
+jbig2_error (Jbig2Ctx *ctx, Jbig2Severity severity, int32_t seg_idx, const char *fmt, ...);
 
 /* the page structure handles decoded page
    results. it's allocated by a 'page info'
