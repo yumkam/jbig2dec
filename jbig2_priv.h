@@ -126,6 +126,12 @@ __attribute__((__format__ (__printf__, 4, 5)))
 #endif
 jbig2_error (Jbig2Ctx *ctx, Jbig2Severity severity, int32_t seg_idx, const char *fmt, ...);
 
+#if defined(NDEBUG) && (defined(__GNUC__) || (defined (__STDC_VERSION__) && __STDC_VERSION__ >= 199901L))
+#define jbig2_error(CTX,SEVERITY,IDX,FMT,...) \
+	((SEVERITY) == JBIG2_SEVERITY_DEBUG \
+	 ? 0 : jbig2_error(CTX,SEVERITY,IDX,FMT, __VA_ARGS__))
+#endif
+
 /* the page structure handles decoded page
    results. it's allocated by a 'page info'
    segement and marked complete by an 'end of page'
