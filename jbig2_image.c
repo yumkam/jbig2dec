@@ -38,6 +38,10 @@ jbig2_image_new(Jbig2Ctx *ctx, int width, int height)
     int stride;
     int64_t check;
 
+    if (width < 0 || height < 0) {
+        jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "negative dimentions (%dx%d)", width, height);
+        return NULL;
+    }
     image = jbig2_new(ctx, Jbig2Image, 1);
     if (image == NULL) {
         jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "could not allocate image structure in jbig2_image_new");
