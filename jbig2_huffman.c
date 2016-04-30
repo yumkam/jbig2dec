@@ -676,6 +676,25 @@ jbig2_find_table(Jbig2Ctx *ctx, Jbig2Segment *segment, int index)
     return NULL;
 }
 
+const Jbig2HuffmanTable *
+jbig2_huffman_get_standard_table (Jbig2Ctx *ctx, Jbig2StandardTables idx)
+{
+    static const Jbig2HuffmanParams * const standard_parameters[] = {
+	&jbig2_huffman_params_A, &jbig2_huffman_params_B, &jbig2_huffman_params_C,
+	&jbig2_huffman_params_D, &jbig2_huffman_params_E, &jbig2_huffman_params_F,
+	&jbig2_huffman_params_G, &jbig2_huffman_params_H, &jbig2_huffman_params_I,
+	&jbig2_huffman_params_J, &jbig2_huffman_params_K, &jbig2_huffman_params_L,
+	&jbig2_huffman_params_M, &jbig2_huffman_params_N, &jbig2_huffman_params_O
+    };
+    /* Static_assert(sizeof(ctx->standard_tables)/sizeof(ctx->standard_tables[0]) == sizeof(standard_parameters)/sizeof(standard_parameters[0])); */
+    /* Static_assert(sizeof(ctx->standard_tables)/sizeof(ctx->standard_tables[0]) == JBIG2_STANDARD_TABLE_O + 1); */
+    if (idx < 0 || idx >= sizeof(ctx->standard_tables)/sizeof(ctx->standard_tables[0]))
+	return NULL;
+    if (ctx->standard_tables[idx])
+	return ctx->standard_tables[idx];
+    return (ctx->standard_tables[idx] = jbig2_build_huffman_table(ctx, standard_parameters[idx]));
+}
+
 #ifdef TEST
 #include <stdio.h>
 

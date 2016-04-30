@@ -94,6 +94,7 @@ struct _Jbig2Ctx {
     int current_page;
     int max_page_index;
     Jbig2Page *pages;
+    const void *standard_tables[15];
 };
 
 uint32_t  jbig2_get_uint32(const byte *bptr);

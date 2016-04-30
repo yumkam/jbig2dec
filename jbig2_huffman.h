@@ -96,6 +96,17 @@ extern const Jbig2HuffmanParams jbig2_huffman_params_M; /* Table B.13 */
 extern const Jbig2HuffmanParams jbig2_huffman_params_N; /* Table B.14 */
 extern const Jbig2HuffmanParams jbig2_huffman_params_O; /* Table B.15 */
 
+typedef enum {
+    JBIG2_STANDARD_TABLE_A, JBIG2_STANDARD_TABLE_B, JBIG2_STANDARD_TABLE_C,
+    JBIG2_STANDARD_TABLE_D, JBIG2_STANDARD_TABLE_E, JBIG2_STANDARD_TABLE_F,
+    JBIG2_STANDARD_TABLE_G, JBIG2_STANDARD_TABLE_H, JBIG2_STANDARD_TABLE_I,
+    JBIG2_STANDARD_TABLE_J, JBIG2_STANDARD_TABLE_K, JBIG2_STANDARD_TABLE_L,
+    JBIG2_STANDARD_TABLE_M, JBIG2_STANDARD_TABLE_N, JBIG2_STANDARD_TABLE_O
+} Jbig2StandardTables;
+
+const Jbig2HuffmanTable *
+jbig2_huffman_get_standard_table (Jbig2Ctx *ctx, Jbig2StandardTables idx);
+
 /* Routines to handle "code table segment (53)" */
 
 /* Parse a code table segment, store Jbig2HuffmanParams in segment->result */

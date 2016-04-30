@@ -153,6 +153,7 @@ jbig2_ctx_new(Jbig2Allocator *allocator, Jbig2Options options, Jbig2GlobalCtx *g
             result->pages[index].image = NULL;
         }
     }
+    memset(result->standard_tables, 0, sizeof(result->standard_tables));
 
     return result;
 }
@@ -351,6 +352,9 @@ jbig2_ctx_free(Jbig2Ctx *ctx)
                 jbig2_image_release(ctx, ctx->pages[i].image);
         jbig2_free(ca, ctx->pages);
     }
+
+    for (i = 0; i < sizeof(ctx->standard_tables)/sizeof(ctx->standard_tables[0]); i++)
+        jbig2_release_huffman_table(ctx, ctx->standard_tables[i]);
 
     jbig2_free(ca, ctx);
 }

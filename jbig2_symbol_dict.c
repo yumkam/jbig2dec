@@ -318,8 +318,8 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
     } else {
         jbig2_error(ctx, JBIG2_SEVERITY_DEBUG, segment->number, "huffman coded symbol dictionary");
         hs = jbig2_huffman_new(ctx, ws);
-        SDHUFFRDX = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_O);
-        SBHUFFRSIZE = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_A);
+        SDHUFFRDX = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_O);
+        SBHUFFRSIZE = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_A);
         if ((hs == NULL) || (SDHUFFRDX == NULL) || (SBHUFFRSIZE == NULL)) {
             jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, "failed to allocate storage for symbol bitmap");
             goto cleanup2;
@@ -499,9 +499,9 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
                                 tparams->IARDX = IARDX; /* ditto */
                                 tparams->IARDY = IARDY; /* ditto */
                             } else {
-                                tparams->SBHUFFFS = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_F);    /* Table B.6 */
-                                tparams->SBHUFFDS = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_H);    /* Table B.8 */
-                                tparams->SBHUFFDT = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_K);    /* Table B.11 */
+                                tparams->SBHUFFFS = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_F);   /* Table B.6 */
+                                tparams->SBHUFFDS = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_H);  /* Table B.8 */
+                                tparams->SBHUFFDT = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_K);  /* Table B.11 */
                                 tparams->SBHUFFRDW = /* Table B.15 */
                                 tparams->SBHUFFRDH = /* Table B.15 */
                                 tparams->SBHUFFRDX = /* Table B.15 */
@@ -804,9 +804,11 @@ cleanup4:
             /* tparams->IARDX aliases IARDX */
             /* tparams->IARDY aliases IARDY */
         } else {
+#if 0 /* standard tables */
             jbig2_release_huffman_table(ctx, tparams->SBHUFFFS);
             jbig2_release_huffman_table(ctx, tparams->SBHUFFDS);
             jbig2_release_huffman_table(ctx, tparams->SBHUFFDT);
+#endif
 #if 0 /* aliases SDHUFFRDX and SBHUFFRSIZE */
             jbig2_release_huffman_table(ctx, tparams->SBHUFFRDX);
             jbig2_release_huffman_table(ctx, tparams->SBHUFFRDY);
@@ -827,8 +829,10 @@ cleanup2:
     if (params->SDHUFF && !params->SDREFAGG) {
         jbig2_free(ctx->allocator, SDNEWSYMWIDTHS);
     }
+#if 0 /* standard tables */
     jbig2_release_huffman_table(ctx, SDHUFFRDX);
     jbig2_release_huffman_table(ctx, SBHUFFRSIZE);
+#endif
     jbig2_huffman_free(ctx, hs);
     jbig2_arith_iaid_ctx_free(ctx, IAID);
     jbig2_arith_int_ctx_free(ctx, IARDX);
@@ -894,10 +898,10 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
     if (params.SDHUFF) {
         switch ((flags & 0x000c) >> 2) {
         case 0:                /* Table B.4 */
-            params.SDHUFFDH = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_D);
+            params.SDHUFFDH = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_D);
             break;
         case 1:                /* Table B.5 */
-            params.SDHUFFDH = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_E);
+            params.SDHUFFDH = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_E);
             break;
         case 3:                /* Custom table from referred segment */
             huffman_params = jbig2_find_table(ctx, segment, table_index);
@@ -918,10 +922,10 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
 
         switch ((flags & 0x0030) >> 4) {
         case 0:                /* Table B.2 */
-            params.SDHUFFDW = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_B);
+            params.SDHUFFDW = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_B);
             break;
         case 1:                /* Table B.3 */
-            params.SDHUFFDW = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_C);
+            params.SDHUFFDW = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_C);
             break;
         case 3:                /* Custom table from referred segment */
             huffman_params = jbig2_find_table(ctx, segment, table_index);
@@ -953,7 +957,7 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
             }
         } else {
             /* Table B.1 */
-            params.SDHUFFBMSIZE = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_A);
+            params.SDHUFFBMSIZE = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_A);
         }
         if (params.SDHUFFBMSIZE == NULL) {
             jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "failed to allocate BMSIZE huffman table");
@@ -971,7 +975,7 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
             }
         } else {
             /* Table B.1 */
-            params.SDHUFFAGGINST = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_A);
+            params.SDHUFFAGGINST = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_A);
         }
         if (params.SDHUFFAGGINST == NULL) {
             jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "failed to allocate REFAGG huffman table");
@@ -1117,9 +1121,13 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
 
 cleanup:
     if (params.SDHUFF) {
+        if (((flags & 0x000c) >> 2) == 3)
         jbig2_release_huffman_table(ctx, params.SDHUFFDH);
+        if (((flags & 0x0030) >> 4) == 3)
         jbig2_release_huffman_table(ctx, params.SDHUFFDW);
+        if (flags & 0x0040)
         jbig2_release_huffman_table(ctx, params.SDHUFFBMSIZE);
+        if (flags & 0x0080)
         jbig2_release_huffman_table(ctx, params.SDHUFFAGGINST);
     }
     jbig2_sd_release(ctx, params.SDINSYMS);

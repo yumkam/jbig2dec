@@ -458,10 +458,10 @@ jbig2_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data
         /* 7.4.3.1.6 - Other Huffman table selection */
         switch (huffman_flags & 0x0003) {
         case 0:                /* Table B.6 */
-            params.SBHUFFFS = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_F);
+            params.SBHUFFFS = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_F);
             break;
         case 1:                /* Table B.7 */
-            params.SBHUFFFS = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_G);
+            params.SBHUFFFS = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_G);
             break;
         case 3:                /* Custom table from referred segment */
             huffman_params = jbig2_find_table(ctx, segment, table_index);
@@ -485,13 +485,13 @@ jbig2_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data
 
         switch ((huffman_flags & 0x000c) >> 2) {
         case 0:                /* Table B.8 */
-            params.SBHUFFDS = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_H);
+            params.SBHUFFDS = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_H);
             break;
         case 1:                /* Table B.9 */
-            params.SBHUFFDS = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_I);
+            params.SBHUFFDS = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_I);
             break;
         case 2:                /* Table B.10 */
-            params.SBHUFFDS = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_J);
+            params.SBHUFFDS = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_J);
             break;
         case 3:                /* Custom table from referred segment */
             huffman_params = jbig2_find_table(ctx, segment, table_index);
@@ -510,13 +510,13 @@ jbig2_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data
 
         switch ((huffman_flags & 0x0030) >> 4) {
         case 0:                /* Table B.11 */
-            params.SBHUFFDT = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_K);
+            params.SBHUFFDT = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_K);
             break;
         case 1:                /* Table B.12 */
-            params.SBHUFFDT = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_L);
+            params.SBHUFFDT = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_L);
             break;
         case 2:                /* Table B.13 */
-            params.SBHUFFDT = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_M);
+            params.SBHUFFDT = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_M);
             break;
         case 3:                /* Custom table from referred segment */
             huffman_params = jbig2_find_table(ctx, segment, table_index);
@@ -535,10 +535,10 @@ jbig2_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data
 
         switch ((huffman_flags & 0x00c0) >> 6) {
         case 0:                /* Table B.14 */
-            params.SBHUFFRDW = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_N);
+            params.SBHUFFRDW = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_N);
             break;
         case 1:                /* Table B.15 */
-            params.SBHUFFRDW = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_O);
+            params.SBHUFFRDW = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_O);
             break;
         case 3:                /* Custom table from referred segment */
             huffman_params = jbig2_find_table(ctx, segment, table_index);
@@ -562,10 +562,10 @@ jbig2_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data
 
         switch ((huffman_flags & 0x0300) >> 8) {
         case 0:                /* Table B.14 */
-            params.SBHUFFRDH = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_N);
+            params.SBHUFFRDH = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_N);
             break;
         case 1:                /* Table B.15 */
-            params.SBHUFFRDH = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_O);
+            params.SBHUFFRDH = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_O);
             break;
         case 3:                /* Custom table from referred segment */
             huffman_params = jbig2_find_table(ctx, segment, table_index);
@@ -589,10 +589,10 @@ jbig2_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data
 
         switch ((huffman_flags & 0x0c00) >> 10) {
         case 0:                /* Table B.14 */
-            params.SBHUFFRDX = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_N);
+            params.SBHUFFRDX = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_N);
             break;
         case 1:                /* Table B.15 */
-            params.SBHUFFRDX = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_O);
+            params.SBHUFFRDX = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_O);
             break;
         case 3:                /* Custom table from referred segment */
             huffman_params = jbig2_find_table(ctx, segment, table_index);
@@ -616,10 +616,10 @@ jbig2_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data
 
         switch ((huffman_flags & 0x3000) >> 12) {
         case 0:                /* Table B.14 */
-            params.SBHUFFRDY = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_N);
+            params.SBHUFFRDY = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_N);
             break;
         case 1:                /* Table B.15 */
-            params.SBHUFFRDY = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_O);
+            params.SBHUFFRDY = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_O);
             break;
         case 3:                /* Custom table from referred segment */
             huffman_params = jbig2_find_table(ctx, segment, table_index);
@@ -643,7 +643,7 @@ jbig2_text_region(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segment_data
 
         switch ((huffman_flags & 0x4000) >> 14) {
         case 0:                /* Table B.1 */
-            params.SBHUFFRSIZE = jbig2_build_huffman_table(ctx, &jbig2_huffman_params_A);
+            params.SBHUFFRSIZE = jbig2_huffman_get_standard_table(ctx, JBIG2_STANDARD_TABLE_A);
             break;
         case 1:                /* Custom table from referred segment */
             huffman_params = jbig2_find_table(ctx, segment, table_index);
@@ -916,13 +916,21 @@ cleanup2:
 
 cleanup1:
     if (params.SBHUFF) {
+        if ((huffman_flags & 0x0003) == 3)
         jbig2_release_huffman_table(ctx, params.SBHUFFFS);
+        if (((huffman_flags & 0x000c) >> 2) == 3)
         jbig2_release_huffman_table(ctx, params.SBHUFFDS);
+        if (((huffman_flags & 0x0030) >> 4) == 3)
         jbig2_release_huffman_table(ctx, params.SBHUFFDT);
+        if (((huffman_flags & 0x0c00) >> 10) == 3)
         jbig2_release_huffman_table(ctx, params.SBHUFFRDX);
+        if (((huffman_flags & 0x3000) >> 12) == 3)
         jbig2_release_huffman_table(ctx, params.SBHUFFRDY);
+        if (((huffman_flags & 0x00c0) >> 6) == 3)
         jbig2_release_huffman_table(ctx, params.SBHUFFRDW);
+        if (((huffman_flags & 0x0300) >> 8) == 3)
         jbig2_release_huffman_table(ctx, params.SBHUFFRDH);
+        if ((huffman_flags & 0x4000) >> 14)
         jbig2_release_huffman_table(ctx, params.SBHUFFRSIZE);
         jbig2_release_huffman_table(ctx, params.SBSYMCODES);
         jbig2_huffman_free(ctx, hs);
