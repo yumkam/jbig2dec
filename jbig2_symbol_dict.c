@@ -291,13 +291,12 @@ jbig2_decode_symbol_dict(Jbig2Ctx *ctx,
         }
     }
     if (!params->SDHUFF) {
-    as = jbig2_arith_new(ctx, ws);
-    if (as == NULL) {
-        jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, "failed to allocate as in jbig2_decode_symbol_dict");
-        jbig2_word_stream_buf_free(ctx, ws);
-        return NULL;
-    }
-
+        as = jbig2_arith_new(ctx, ws);
+        if (as == NULL) {
+            jbig2_error(ctx, JBIG2_SEVERITY_WARNING, segment->number, "failed to allocate as in jbig2_decode_symbol_dict");
+            jbig2_word_stream_buf_free(ctx, ws);
+            return NULL;
+        }
         IADH = jbig2_arith_int_ctx_new(ctx);
         IADW = jbig2_arith_int_ctx_new(ctx);
         IAEX = jbig2_arith_int_ctx_new(ctx);
