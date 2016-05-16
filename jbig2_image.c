@@ -50,7 +50,12 @@ jbig2_image_new(Jbig2Ctx *ctx, int width, int height)
 
     stride = ((width - 1) >> 3) + 1;    /* generate a byte-aligned stride */
     /* check for integer multiplication overflow */
-    if ((stride <= 0 || height >= (INT_MAX-1)/stride)) {
+    /*
+     * when both stride and height are less than 1<<(INT_BITS/2-1),
+     * their multiply never overflow, avoid expensive division
+     */
+    if ((stride | height) >= (1<<(sizeof(int)*8/2-1)) &&
+        (stride <= 0 || height >= (INT_MAX-1)/stride)) {
         jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "integer multiplication overflow from stride(%d)*height(%d)", stride, height);
         jbig2_free(ctx->allocator, image);
         return NULL;
@@ -117,7 +122,12 @@ jbig2_image_resize(Jbig2Ctx *ctx, Jbig2Image *image, int width, int height)
     }
     if (width == image->width) {
         /* check for integer multiplication overflow */
-        if (/* image->stride >= 0 || */
+        /*
+         * when both stride and height are less than 1<<(INT_BITS/2-1),
+         * their multiply never overflow, avoid expensive division
+         */
+        if ((image->stride | height) >= (1<<(sizeof(int)*8/2-1)) &&
+            /* image->stride <= 0 || */
             height >= (INT_MAX-1)/image->stride) {
             jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1, "integer multiplication overflow during resize stride(%d)*height(%d)", image->stride, height);
             return NULL;
