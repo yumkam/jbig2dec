@@ -139,6 +139,24 @@ jbig2_image_resize(Jbig2Ctx *ctx, Jbig2Image *image, int width, int height)
     return NULL;
 }
 
+#ifdef NO_INLINE_PIXEL_ACCESS
+#define image_get_pixel_unsafe(IM,L,X,Y) \
+      jbig2_image_get_pixel(IM, (X), (Y))
+#define image_set_pixel_unsafe(IM,L,X,Y,BIT) \
+      jbig2_image_set_pixel(IM, X, Y, BIT)
+#else
+#define image_get_pixel_unsafe(IM,L,X,Y) \
+    (/*assert((X) >= 0 && (X) < (IM)->width && \
+       (Y) >= 0 && (Y) < (IM)->height && \
+       L == ((byte *)(IM)->data) + (IM)->stride*(Y)),*/ \
+     ((L[(X)>>3] >> (7-((X) & 7))) & 1))
+#define image_set_pixel_unsafe(IM,L,X,Y,BIT) \
+    (/*assert((X) >= 0 && (X) < (IM)->width && \
+       (Y) >= 0 && (Y) < (IM)->height && \
+       L == ((byte *)(IM)->data) + (IM)->stride*(Y) && \
+       ((BIT)&~1) == 0),*/ \
+     L[(X)>>3] = (L[(X)>>3] & ~(1<<(7-((X) & 7))))|((BIT)<<(7-((X) & 7))))
+#endif
 /* composite one jbig2_image onto another
    slow but general version */
 static int
@@ -149,6 +167,8 @@ jbig2_image_compose_unopt(Jbig2Ctx *ctx, Jbig2Image *dst, Jbig2Image *src, int x
     int sh = src->height;
     int sx = 0;
     int sy = 0;
+    const byte *srcline;
+    byte *dstline;
 
     /* clip to the dst image boundaries */
     if (x < 0) {
@@ -166,40 +186,62 @@ jbig2_image_compose_unopt(Jbig2Ctx *ctx, Jbig2Image *dst, Jbig2Image *src, int x
     if (y + sh >= dst->height)
         sh = dst->height - y;
 
+    srcline = src->data + src->stride * sy;
+    dstline = dst->data + dst->stride * y;
+    /*
+    assert(sw <= dst->width && sh <= dst->height);
+    assert(sw <= src->width && sh <= src->height);
+    assert(sh <= 0 || sw <= 0 || ( x >= 0 &&  y >= 0 &&  x <= dst->width-sw &&  y <= dst->height-sh));
+    assert(sh <= 0 || sw <= 0 || (sx >= 0 && sy >= 0 && sx <= src->width-sw && sy <= src->height-sh));
+    */
     switch (op) {
     case JBIG2_COMPOSE_OR:
         for (j = 0; j < sh; j++) {
             for (i = 0; i < sw; i++) {
-                jbig2_image_set_pixel(dst, i + x, j + y, jbig2_image_get_pixel(src, i + sx, j + sy) | jbig2_image_get_pixel(dst, i + x, j + y));
+                image_set_pixel_unsafe(dst, dstline, i + x, j + y,
+                                       image_get_pixel_unsafe(src, srcline, i + sx, j + sy) | image_get_pixel_unsafe(dst, dstline, i + x, j + y));
             }
+            srcline += src->stride;
+            dstline += dst->stride;
         }
         break;
     case JBIG2_COMPOSE_AND:
         for (j = 0; j < sh; j++) {
             for (i = 0; i < sw; i++) {
-                jbig2_image_set_pixel(dst, i + x, j + y, jbig2_image_get_pixel(src, i + sx, j + sy) & jbig2_image_get_pixel(dst, i + x, j + y));
+                image_set_pixel_unsafe(dst, dstline, i + x, j + y,
+                                       image_get_pixel_unsafe(src, srcline, i + sx, j + sy) & image_get_pixel_unsafe(dst, dstline, i + x, j + y));
             }
+            srcline += src->stride;
+            dstline += dst->stride;
         }
         break;
     case JBIG2_COMPOSE_XOR:
         for (j = 0; j < sh; j++) {
             for (i = 0; i < sw; i++) {
-                jbig2_image_set_pixel(dst, i + x, j + y, jbig2_image_get_pixel(src, i + sx, j + sy) ^ jbig2_image_get_pixel(dst, i + x, j + y));
+                image_set_pixel_unsafe(dst, dstline, i + x, j + y,
+                                       image_get_pixel_unsafe(src, srcline, i + sx, j + sy) ^ image_get_pixel_unsafe(dst, dstline, i + x, j + y));
             }
+            srcline += src->stride;
+            dstline += dst->stride;
         }
         break;
     case JBIG2_COMPOSE_XNOR:
         for (j = 0; j < sh; j++) {
             for (i = 0; i < sw; i++) {
-                jbig2_image_set_pixel(dst, i + x, j + y, (jbig2_image_get_pixel(src, i + sx, j + sy) == jbig2_image_get_pixel(dst, i + x, j + y)));
+                image_set_pixel_unsafe(dst, dstline, i + x, j + y,
+                                       (image_get_pixel_unsafe(src, srcline, i + sx, j + sy) == image_get_pixel_unsafe(dst, dstline, i + x, j + y)));
             }
+            srcline += src->stride;
+            dstline += dst->stride;
         }
         break;
     case JBIG2_COMPOSE_REPLACE:
         for (j = 0; j < sh; j++) {
             for (i = 0; i < sw; i++) {
-                jbig2_image_set_pixel(dst, i + x, j + y, jbig2_image_get_pixel(src, i + sx, j + sy));
+                image_set_pixel_unsafe(dst, dstline, i + x, j + y, image_get_pixel_unsafe(src, srcline, i + sx, j + sy));
             }
+            srcline += src->stride;
+            dstline += dst->stride;
         }
         break;
     }
