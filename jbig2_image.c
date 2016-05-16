@@ -272,6 +272,112 @@ jbig2_image_compose(Jbig2Ctx *ctx, Jbig2Image *dst, Jbig2Image *src, int x, int 
     ss = src->data;
 
     if (x < 0) {
+        if ((x & 7) && op == JBIG2_COMPOSE_REPLACE) {
+            // complete loop unswitch:
+            // used a lot in jbig2_halftone and jbig2_symbol_dict
+            // (often with small w)
+            int sx = (-x) & 7;
+
+            ss += (-x) >> 3;
+            w += x;             /*x = 0; */
+            if (y < 0) {
+                ss += -y * src->stride;
+                h += y;
+                y = 0;
+            }
+            w = (w < dst->width) ? w : dst->width;
+            h = (h < dst->height) ? h : dst->height;
+            /* check for zero clipping region */
+            if ((w <= 0) || (h <= 0))
+                return 0;
+            //assert(sx > 1 && sx < 8);
+            s = ss;
+            d = dd = dst->data + y * dst->stride;
+            if (w < 8) {
+                rightmask = (~0xff) >> (w & 7); // 0b11111000
+                if (w <= 8 - sx) {
+                    // d0 d1 d2 d3 d4.zz zz zz |
+                    // xx xx s0 s1 s2 s3 s4 xx |
+                    for (j = 0; j < h; j++) {
+                        *d = (*d & ~rightmask) | (*s << sx);
+                        s += src->stride;
+                        d += dst->stride;
+                    }
+                } else {
+                    // d0 d1 d2 d3 d4 d5.zz zz |
+                    // xx xx xx xx s0 s1 s2 s3 | s4 s5 s6 s7 ...
+                    // assert(w > 1);
+                    for (j = 0; j < h; j++) {
+                        *d &= ~rightmask;
+                        *d |= ((s[0] << sx) | (s[1] >> (8 - sx))) & rightmask;
+                        d = (dd += dst->stride);
+                        s = (ss += src->stride);
+                    }
+                }
+            } else if ((w & 7) == 0) {
+                if (w == 8) {
+                    // d0 d1 d2 d3 d4 d5 s6 s7 |
+                    // xx xx xx xx s0 s1 s2 s3 | s4 s5 s6 s7 ...
+                    for (j = 0; j < h; j++) {
+                        *d = ((s[0] << sx) | (s[1] >> (8 - sx)));
+                        d = (dd += dst->stride);
+                        s = (ss += src->stride);
+                    }
+                } else {
+                    // d0 d1 d2 d3 d4 d5 d6 d7 || d8 d9 d10 d11 d12 d13 d14 d15.|
+                    // xx xx xx s0 s1 s2 s3 s4 || s5 s6  s7  s8  s9 s10 s11 s12 | s13 s14 s15.
+                    rightbyte = w & ~7;
+                    for (j = 0; j < h; j++) {
+                        *d = *s++ << sx;
+                        for (i = sx + 8; i < rightbyte; i += 8) {
+                            *d++ |= *s >> (8 - sx);
+                            *d = *s++ << sx;
+                        }
+                        *d++ |= *s >> (8 - sx);
+                        //assert(d - dd == (w+7)>>3);
+                        d = (dd += dst->stride);
+                        s = (ss += src->stride);
+                    }
+                }
+            } else {
+                rightmask = (~0xff) >> (w & 7); // 0b11111000 | 0b1111100
+                rightbyte = (w & ~7);
+                if ((w & 7) <= 8 - sx) {
+                    // d0 d1 d2 d3 d4 d5 d6 d7 || d8 d9 d10 d11.d12 d13 d14 d15 |
+                    // xx xx xx s0 s1 s2 s3 s4 || s5 s6  s7+ s8  s9 s10 s11.s12 |
+                    for (j = 0; j < h; j++) {
+                        *d = *s++ << sx;
+                        for (i = sx + 8; i < rightbyte; i += 8) {
+                            *d++ |= *s >> (8 - sx);
+                            *d = *s++ << sx;
+                        }
+                        *d++ |= *s >> (8 - sx);
+                        *d &= ~rightmask;
+                        *d++ |= ((s[0] << sx)) & rightmask;
+                        //assert(d - dd == (w+7)>>3);
+                        d = (dd += dst->stride);
+                        s = (ss += src->stride);
+                    }
+                } else {
+                    // d0 d1 d2 d3 d4 d5 d6 d7 || d8 d9 d10 d11 d12 d13.d14 d15 |
+                    // xx xx xx s0 s1 s2 s3 s4 || s5 s6  s7+ s8  s9 s10 s11 s12.| s13
+                    for (j = 0; j < h; j++) {
+                        *d = *s++ << sx;
+                        for (i = sx + 8; i < rightbyte; i += 8) {
+                            *d++ |= *s >> (8 - sx);
+                            *d = *s++ << sx;
+                        }
+                        *d++ |= *s >> (8 - sx);
+                        *d &= ~rightmask;
+                        *d++ |= ((s[0] << sx) | (s[1] >> (8 - sx))) & rightmask;
+                        //assert(d - dd == (w+7)>>3);
+                        d = (dd += dst->stride);
+                        s = (ss += src->stride);
+                    }
+                }
+            }
+            return 0;
+        }
         if ((x & 7)) {
             /* TODO NYI, fallback to unopt */
             return jbig2_image_compose_unopt(ctx, dst, src, x, y, op);
@@ -281,7 +387,11 @@ jbig2_image_compose(Jbig2Ctx *ctx, Jbig2Image *dst, Jbig2Image *src, int x, int 
         x = 0;
     }
     if (op == JBIG2_COMPOSE_REPLACE && (x & 7)) {
-        /* NYI, too confusing */
+        /* NYI [***] */
+        /* Note: jbig2_halftone and jbig2_symbol_dict only uses
+         * negative x, this branch is only about positive x,
+         * thus not worth optimizing
+         */
         return jbig2_image_compose_unopt(ctx, dst, src, x, y, op);
     }
     if (y < 0) {
@@ -324,6 +434,10 @@ jbig2_image_compose(Jbig2Ctx *ctx, Jbig2Image *dst, Jbig2Image *src, int x, int 
     }
     if (op == JBIG2_COMPOSE_REPLACE) {
         uint8_t dmask;
+
+        // complete unswitch loop:
+        // used a lot in jbig2_halftone and jbig2_symbol_dict
+        // (with negative x, when (-x) % 8 == 0)
         if (leftbyte == rightbyte) {
             mask = 0x100 - (0x100 >> w);
             dmask = ~(mask >> shift);
@@ -342,7 +456,7 @@ jbig2_image_compose(Jbig2Ctx *ctx, Jbig2Image *dst, Jbig2Image *src, int x, int 
                 s = (ss += src->stride);
             }
         } else {
-            /* XXX NYI, should be rejected above */
+            /* XXX NYI, should be fallbacked above [***] */
             return jbig2_error(ctx, JBIG2_SEVERITY_FATAL, -1,
                     "jbig2_image_compose(REPLACE): NYI");
         }
