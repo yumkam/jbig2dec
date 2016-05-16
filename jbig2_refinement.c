@@ -37,7 +37,77 @@
 #include "jbig2_generic.h"
 #include "jbig2_image.h"
 
+#if 0
+#define DBG(format, ...) fprintf(stderr, "%s: " format, __func__,  __VA_ARGS__)
+#else
+#define DBG(format, ...) /**/
+#endif
+#undef LEGACY
+#undef NO_INLINE_MKCTX
+#undef NO_INLINE_IMPLICIT_VALUE
+#undef NO_INLINE_PIXEL_ACCESS
+#undef NO_NOMINAL
+
+#ifdef NO_INLINE_PIXEL_ACCESS
+/* uses: x, y */
+#define GETRELPIX0(IM,L,GBW,GBH,XOFF,YOFF,OFFSET) \
+  jbig2_image_get_pixel(IM, x + (XOFF), y + (YOFF))
+#define SETPIXNOCHECK(IM,L,X,Y,BIT) \
+  jbig2_image_set_pixel(IM, X, Y, BIT)
+#else
+/* uses: x, y */
+/* requires: L + OFFSET == data + (y + YOFF)*stride */
+#define GETRELPIX0(IM,L,GBW,GBH,XOFF,YOFF,OFFSET) \
+  ((x + XOFF < 0 || x + XOFF >= GBW || \
+    y + YOFF < 0 || y + YOFF >= GBH) \
+   ? 0 \
+   : (/*assert((L) + (OFFSET) == (IM)->data + (IM)->stride*(y + (YOFF))),*/ \
+      L[((x + (XOFF)) >> 3) + (OFFSET)] >> (7 - ((x + (XOFF)) & 7))) & 1 )
+#define SETPIXNOCHECK(IM,L,X,Y,BIT) \
+  (/*assert((X) >= 0 && (X) < (IM)->width && \
+          (Y) >= 0 && (Y) < (IM)->height && \
+          L == ((byte *)(IM)->data) + (IM)->stride*(Y) && \
+          ((BIT)&~1) == 0),*/ \
+   L[(X)>>3] = (L[(X)>>3] & ~(1<<(7-((X) & 7))))|(BIT<<(7-((X) & 7))))
+#endif
+
+/** Simplified GETRELPIX0 wrapper for image.
+ * uses: GRW [= image->width], GRH [= image->height], x, y (origin point in image), image, imline [= image->data + y*image->stride] */
+#define GETRELPIX0_image(XOFF_,YOFF_,OFFSET_) \
+  GETRELPIX0(image, imline, GRW, GRH, XOFF_, YOFF_, OFFSET_)
+/** Simplified GETRELPIX0 wrapper for ref.
+ * uses: GXW [= ref->width], GXH [= ref->height], x, y (origin point in image), dx [= params->DX], dy [= params->DY], ref, refline [= ref->data + (y - dy) * ref->stride] */
+#define GETRELPIX0_ref(XOFF_,YOFF_,OFFSET_) \
+  GETRELPIX0(ref, refline,  GXW, GXH, (XOFF_)-dx, (YOFF_)-dy, OFFSET_)
+
+/** Simplified GETRELPIX0_image wrapper for constant XOFF and YOFF.
+ * uses: same as GETRELPIX0_image, and imstride [= image->stride] */
+#define GETRELPIX0_image_const(XOFF__, YOFF__) \
+  GETRELPIX0_image((XOFF__),(YOFF__),(YOFF__)*imstride)
+/** Simplified GETRELPIX0_ref wrapper for constant XOFF and YOFF.
+ * uses: same as GETRELPIX0_ref, and refstride [= ref->stride] */
+#define GETRELPIX0_ref_const(XOFF__, YOFF__) \
+  GETRELPIX0_ref((XOFF__),(YOFF__),(YOFF__)*refstride)
+
+/* Declare and assign variables for GETRELPIX0_image */
+#define GETRELPIX_image_vars \
+  int x,y; \
+  const int GRW = image->width; \
+  const int GRH = image->height; \
+  const int imstride = image->stride; \
+  byte *imline = (byte *)image->data
+/* Declare and assign variables for GETRELPIX0_ref */
+#define GETRELPIX_ref_vars \
+  const Jbig2Image * const ref = params->reference; \
+  const int dx = params->DX; \
+  const int dy = params->DY; \
+  const int GXW = ref->width; \
+  const int GXH = ref->height; \
+  const int refstride = ref->stride; \
+  const byte *refline = ((const byte *)ref->data) - dy*refstride
+
 #if 0                           /* currently not used */
+/* TODO: implement with assumption of nominal position and (DX & 7) == 0 */
 static int
 jbig2_decode_refinement_template0(Jbig2Ctx *ctx,
                                   Jbig2Segment *segment,
@@ -48,21 +118,136 @@ jbig2_decode_refinement_template0(Jbig2Ctx *ctx,
 #endif
 
 static int
+jbig2_decode_refinement_template0_nominal(Jbig2Ctx *ctx,
+        Jbig2Segment *segment,
+        const Jbig2RefinementRegionParams *params, Jbig2ArithState *as, Jbig2Image *image, Jbig2ArithCx *GR_stats)
+{
+    GETRELPIX_image_vars;
+    GETRELPIX_ref_vars;
+
+    /* nominal position: GRAT[XY][01] -1, -1, -1, -1 */
+    DBG("dxy=(%+d,%+d)\n", dx, dy);
+    for (y = 0; y < GRH; y++, imline += imstride, refline += refstride) {
+        bool bit;
+        uint32_t CONTEXT = 0;
+
+        x = 0;
+#ifndef LEGACY
+        /* XXX MKCTX0N_PRE and MKCTX0N_KEEP_MASK are also used in jbig2_decode_refinement_TPGRON */
+#define MKCTX0N_PRE(INIT) do { \
+    if ( INIT) CONTEXT |= GETRELPIX0_image_const(-1, +0) << 0; \
+    if (!INIT) CONTEXT |= GETRELPIX0_image_const(+1, -1) << 1; \
+    if ( INIT) CONTEXT |= GETRELPIX0_image_const(+0, -1) << 2; \
+    if ( INIT) CONTEXT |= GETRELPIX0_image_const(-1, -1) << 3; \
+    if (!INIT) CONTEXT |= GETRELPIX0_ref_const(+1, +1) <<  4; \
+    if ( INIT) CONTEXT |= GETRELPIX0_ref_const(+0, +1) <<  5; \
+    if ( INIT) CONTEXT |= GETRELPIX0_ref_const(-1, +1) <<  6; \
+    if (!INIT) CONTEXT |= GETRELPIX0_ref_const(+1, +0) <<  7; \
+    if ( INIT) CONTEXT |= GETRELPIX0_ref_const(+0, +0) <<  8; \
+    if ( INIT) CONTEXT |= GETRELPIX0_ref_const(-1, +0) <<  9; \
+    if (!INIT) CONTEXT |= GETRELPIX0_ref_const(+1, -1) << 10; \
+    if ( INIT) CONTEXT |= GETRELPIX0_ref_const(+0, -1) << 11; \
+    if ( INIT) CONTEXT |= GETRELPIX0_ref_const(-1, -1) << 12; \
+} while(0)
+#define MKCTX0N_KEEP_MASK \
+      ((1<<2)|(1<<3)|(1<<5)|(1<<6)|(1<<8)|(1<<9)|(1<<11)|(1<<12))
+        /* set bits 0, 2, 3, 5, 6, 8, 9, 11, 12 for first iteration */
+        MKCTX0N_PRE(TRUE);
+#endif
+        for (; x < GRW; x++) {
+#ifndef LEGACY
+            /* set bits 1, 4, 7, 10 for all iterations */
+            MKCTX0N_PRE(FALSE);
+#else
+            CONTEXT = 0;
+            CONTEXT |= jbig2_image_get_pixel(image, x - 1, y + 0) << 0;
+            CONTEXT |= jbig2_image_get_pixel(image, x + 1, y - 1) << 1;
+            CONTEXT |= jbig2_image_get_pixel(image, x + 0, y - 1) << 2;
+            CONTEXT |= jbig2_image_get_pixel(image, x - 1, y - 1) << 3;
+            CONTEXT |= jbig2_image_get_pixel(ref, x - dx + 1, y - dy + 1) << 4;
+            CONTEXT |= jbig2_image_get_pixel(ref, x - dx + 0, y - dy + 1) << 5;
+            CONTEXT |= jbig2_image_get_pixel(ref, x - dx - 1, y - dy + 1) << 6;
+            CONTEXT |= jbig2_image_get_pixel(ref, x - dx + 1, y - dy + 0) << 7;
+            CONTEXT |= jbig2_image_get_pixel(ref, x - dx + 0, y - dy + 0) << 8;
+            CONTEXT |= jbig2_image_get_pixel(ref, x - dx - 1, y - dy + 0) << 9;
+            CONTEXT |= jbig2_image_get_pixel(ref, x - dx + 1, y - dy - 1) << 10;
+            CONTEXT |= jbig2_image_get_pixel(ref, x - dx + 0, y - dy - 1) << 11;
+            CONTEXT |= jbig2_image_get_pixel(ref, x - dx - 1, y - dy - 1) << 12;
+#endif
+            bit = jbig2_arith_decode(as, &GR_stats[CONTEXT]);
+            if (bit < 0)
+                return -1;
+            SETPIXNOCHECK(image, imline, x, y, bit);
+#ifndef LEGACY
+            /* calculate bits 0, 2, 3, 5, 6, 8, 9, 11, 12 for next iteration */
+            CONTEXT = ((CONTEXT << 1) & MKCTX0N_KEEP_MASK) | bit;
+#endif
+        }
+    }
+#ifdef JBIG2_DEBUG_DUMP
+    {
+        static count = 0;
+        char name[32];
+
+        snprintf(name, 32, "refin-%d.pbm", count);
+        jbig2_image_write_pbm_file(ref, name);
+        snprintf(name, 32, "refout-%d.pbm", count);
+        jbig2_image_write_pbm_file(image, name);
+        count++;
+    }
+#endif
+
+    return 0;
+}
+
+static int
 jbig2_decode_refinement_template0_unopt(Jbig2Ctx *ctx,
                                         Jbig2Segment *segment,
                                         const Jbig2RefinementRegionParams *params, Jbig2ArithState *as, Jbig2Image *image, Jbig2ArithCx *GR_stats)
 {
-    const int GRW = image->width;
-    const int GRH = image->height;
-    const int dx = params->DX;
-    const int dy = params->DY;
-    Jbig2Image *ref = params->reference;
-    uint32_t CONTEXT;
-    int x, y;
-    bool bit;
+    GETRELPIX_image_vars;
+    GETRELPIX_ref_vars;
+    const int xoffI = params->grat[0];
+    const int yoffI = params->grat[1];
+    const int offsetI = imstride * yoffI;
+    const int xoffR = params->grat[2];
+    const int yoffR = params->grat[3];
+    const int offsetR = refstride * yoffR;
 
-    for (y = 0; y < GRH; y++) {
-        for (x = 0; x < GRW; x++) {
+    /* TODO optimized special-case (DX & 7) == 0 */
+    DBG("dxy=(%+d,%+d) off={ (%+d,%+d), (%+d,%+d) }\n", dx, dy, xoffI, yoffI, xoffR, yoffR);
+    for (y = 0; y < GRH; y++, imline += imstride, refline += refstride) {
+        bool bit;
+        uint32_t CONTEXT = 0;
+
+        x = 0;
+#ifndef LEGACY
+        /* XXX MKCTX0G_PRE and MKCTX0G_KEEP_MASK are also used in jbig2_decode_refinement_TPGRON */
+#define MKCTX0G_PRE(INIT) do { \
+    if ( INIT) CONTEXT |= GETRELPIX0_image_const(-1, +0) << 0; \
+    if (!INIT) CONTEXT |= GETRELPIX0_image_const(+1, -1) << 1; \
+    if ( INIT) CONTEXT |= GETRELPIX0_image_const(+0, -1) << 2; \
+    if (!INIT) CONTEXT |= GETRELPIX0_image(xoffI, yoffI, offsetI) << 3; \
+    if (!INIT) CONTEXT |= GETRELPIX0_ref_const(+1, +1) << 4; \
+    if ( INIT) CONTEXT |= GETRELPIX0_ref_const(+0, +1) << 5; \
+    if ( INIT) CONTEXT |= GETRELPIX0_ref_const(-1, +1) << 6; \
+    if (!INIT) CONTEXT |= GETRELPIX0_ref_const(+1, +0) << 7; \
+    if ( INIT) CONTEXT |= GETRELPIX0_ref_const(+0, +0) << 8; \
+    if ( INIT) CONTEXT |= GETRELPIX0_ref_const(-1, +0) << 9; \
+    if (!INIT) CONTEXT |= GETRELPIX0_ref_const(+1, -1) << 10; \
+    if ( INIT) CONTEXT |= GETRELPIX0_ref_const(+0, -1) << 11; \
+    if (!INIT) CONTEXT |= GETRELPIX0_ref(xoffR, yoffR, offsetR) << 12; \
+} while(0)
+#define MKCTX0G_KEEP_MASK \
+      ((1<<2)|(1<<5)|(1<<6)|(1<<8)|(1<<9)|(1<<11))
+        /* set bits 0, 2, 5, 6, 8, 9, 11 for first iteration */
+        MKCTX0G_PRE(TRUE);
+#endif
+        for (; x < GRW; x++) {
+#ifndef LEGACY
+            /* set bits 1, 3, 4, 7, 10, 12 for all iterations */
+            MKCTX0G_PRE(FALSE);
+#else
             CONTEXT = 0;
             CONTEXT |= jbig2_image_get_pixel(image, x - 1, y + 0) << 0;
             CONTEXT |= jbig2_image_get_pixel(image, x + 1, y - 1) << 1;
@@ -77,10 +262,15 @@ jbig2_decode_refinement_template0_unopt(Jbig2Ctx *ctx,
             CONTEXT |= jbig2_image_get_pixel(ref, x - dx + 1, y - dy - 1) << 10;
             CONTEXT |= jbig2_image_get_pixel(ref, x - dx + 0, y - dy - 1) << 11;
             CONTEXT |= jbig2_image_get_pixel(ref, x - dx + params->grat[2], y - dy + params->grat[3]) << 12;
+#endif
             bit = jbig2_arith_decode(as, &GR_stats[CONTEXT]);
             if (bit < 0)
                 return -1;
-            jbig2_image_set_pixel(image, x, y, bit);
+            SETPIXNOCHECK(image, imline, x, y, bit);
+#ifndef LEGACY
+            /* calculate bits 0, 2, 5, 6, 8, 9, 11 for next iteration */
+            CONTEXT = ((CONTEXT << 1) & MKCTX0G_KEEP_MASK) | bit;
+#endif
         }
     }
 #ifdef JBIG2_DEBUG_DUMP
@@ -104,17 +294,40 @@ jbig2_decode_refinement_template1_unopt(Jbig2Ctx *ctx,
                                         Jbig2Segment *segment,
                                         const Jbig2RefinementRegionParams *params, Jbig2ArithState *as, Jbig2Image *image, Jbig2ArithCx *GR_stats)
 {
-    const int GRW = image->width;
-    const int GRH = image->height;
-    const int dx = params->DX;
-    const int dy = params->DY;
-    Jbig2Image *ref = params->reference;
-    uint32_t CONTEXT;
-    int x, y;
-    bool bit;
+    GETRELPIX_image_vars;
+    GETRELPIX_ref_vars;
 
-    for (y = 0; y < GRH; y++) {
-        for (x = 0; x < GRW; x++) {
+    DBG("dxy=(%+d,%+d)\n", dx, dy);
+    for (y = 0; y < GRH; y++, imline += imstride, refline += refstride) {
+        uint32_t CONTEXT = 0;
+
+        x = 0;
+#ifndef LEGACY
+        /* XXX MKCTX1_PRE and MKCTX1_KEEP_MASK are also used in jbig2_decode_refinement_TPGRON */
+#define MKCTX1_PRE(INIT) do { \
+    if ( INIT) CONTEXT |= GETRELPIX0_image_const(-1, +0) << 0; \
+    if (!INIT) CONTEXT |= GETRELPIX0_image_const(+1, -1) << 1; \
+    if ( INIT) CONTEXT |= GETRELPIX0_image_const(+0, -1) << 2; \
+    if ( INIT) CONTEXT |= GETRELPIX0_image_const(-1, -1) << 3; \
+    if (!INIT) CONTEXT |= GETRELPIX0_ref_const(+1, +1) << 4; \
+    if ( INIT) CONTEXT |= GETRELPIX0_ref_const(+0, +1) << 5; \
+    if (!INIT) CONTEXT |= GETRELPIX0_ref_const(+1, +0) << 6; \
+    if ( INIT) CONTEXT |= GETRELPIX0_ref_const(+0, +0) << 7; \
+    if ( INIT) CONTEXT |= GETRELPIX0_ref_const(-1, +0) << 8; \
+    if (!INIT) CONTEXT |= GETRELPIX0_ref_const(+0, -1) << 9; \
+} while(0)
+#define MKCTX1_KEEP_MASK \
+      ((1<<2)|(1<<3)|(1<<5)|(1<<7)|(1<<8))
+        /* set bits 0, 2, 3, 5, 7, 8 for first iteration */
+        MKCTX1_PRE(TRUE);
+#endif
+        for (; x < GRW; x++) {
+            bool bit;
+
+#ifndef LEGACY
+            /* set bits 1, 3, 6, 9 for all iterations */
+            MKCTX1_PRE(FALSE);
+#else
             CONTEXT = 0;
             CONTEXT |= jbig2_image_get_pixel(image, x - 1, y + 0) << 0;
             CONTEXT |= jbig2_image_get_pixel(image, x + 1, y - 1) << 1;
@@ -126,10 +339,15 @@ jbig2_decode_refinement_template1_unopt(Jbig2Ctx *ctx,
             CONTEXT |= jbig2_image_get_pixel(ref, x - dx + 0, y - dy + 0) << 7;
             CONTEXT |= jbig2_image_get_pixel(ref, x - dx - 1, y - dy + 0) << 8;
             CONTEXT |= jbig2_image_get_pixel(ref, x - dx + 0, y - dy - 1) << 9;
+#endif
             bit = jbig2_arith_decode(as, &GR_stats[CONTEXT]);
             if (bit < 0)
                 return -1;
-            jbig2_image_set_pixel(image, x, y, bit);
+            SETPIXNOCHECK(image, imline, x, y, bit);
+#ifndef LEGACY
+            /* calculate bits 0, 2, 3, 5, 7, 8 for next iteration */
+            CONTEXT = ((CONTEXT << 1) & MKCTX1_KEEP_MASK) | bit;
+#endif
         }
     }
 
@@ -150,6 +368,7 @@ jbig2_decode_refinement_template1_unopt(Jbig2Ctx *ctx,
 }
 
 #if 0                           /* currently not used */
+/* TODO: fix/rewrite with assumption of (DX % 8) == 0 */
 static int
 jbig2_decode_refinement_template1(Jbig2Ctx *ctx,
                                   Jbig2Segment *segment,
@@ -172,6 +391,7 @@ jbig2_decode_refinement_template1(Jbig2Ctx *ctx,
         uint32_t refline_1;     /* next line of the reference bitmap */
         uint32_t line_m1;       /* previous line of the decoded bitmap */
 
+        /* TODO ensure padding bits in last byte cleared (ref!!!) */
         line_m1 = (y >= 1) ? grreg_line[-stride] : 0;
         refline_m1 = ((y - dy) >= 1) ? grref_line[(-1 - dy) * stride] << 2 : 0;
         refline_0 = (((y - dy) > 0) && ((y - dy) < GRH)) ? grref_line[(0 - dy) * stride] << 4 : 0;
@@ -224,6 +444,7 @@ jbig2_decode_refinement_template1(Jbig2Ctx *ctx,
 
 typedef uint32_t(*ContextBuilder)(const Jbig2RefinementRegionParams *, Jbig2Image *, int, int);
 
+#if defined(NO_INLINE_IMPLICIT_VALUE)
 static int
 implicit_value(const Jbig2RefinementRegionParams *params, Jbig2Image *image, int x, int y)
 {
@@ -240,7 +461,9 @@ implicit_value(const Jbig2RefinementRegionParams *params, Jbig2Image *image, int
             (jbig2_image_get_pixel(ref, i - 1, j + 1) == m) && (jbig2_image_get_pixel(ref, i, j + 1) == m) && (jbig2_image_get_pixel(ref, i + 1, j + 1) == m)
            )? m : -1;
 }
+#endif
 
+#if defined(NO_INLINE_MKCTX) || defined(NO_INLINE_IMPLICIT_VALUE)
 static uint32_t
 mkctx0(const Jbig2RefinementRegionParams *params, Jbig2Image *image, int x, int y)
 {
@@ -285,39 +508,206 @@ mkctx1(const Jbig2RefinementRegionParams *params, Jbig2Image *image, int x, int 
     CONTEXT |= jbig2_image_get_pixel(ref, x - dx + 0, y - dy - 1) << 9;
     return CONTEXT;
 }
+#endif
 
 static int
 jbig2_decode_refinement_TPGRON(const Jbig2RefinementRegionParams *params, Jbig2ArithState *as, Jbig2Image *image, Jbig2ArithCx *GR_stats)
 {
-    const int GRW = image->width;
-    const int GRH = image->height;
-    int x, y, iv, bit, LTP = 0;
-    uint32_t start_context = (params->GRTEMPLATE ? 0x40 : 0x100);
-    ContextBuilder mkctx = (params->GRTEMPLATE ? mkctx1 : mkctx0);
+    GETRELPIX_image_vars;
+    GETRELPIX_ref_vars;
+    int bit, LTP = 0;
+    const bool GRTEMPLATE = params->GRTEMPLATE;
+    uint32_t start_context = (GRTEMPLATE ? 0x40 : 0x100);
 
-    for (y = 0; y < GRH; y++) {
+#if defined(NO_INLINE_MKCTX) || defined(NO_INLINE_IMPLICIT_VALUE)
+    ContextBuilder mkctx = (GRTEMPLATE ? mkctx1 : mkctx0);
+#endif
+    const int xoffI = params->grat[0];
+    const int yoffI = params->grat[1];
+    const int offsetI = imstride * yoffI;
+    const int xoffR = params->grat[2];
+    const int yoffR = params->grat[3];
+    const int offsetR = refstride * yoffR;
+    const bool nominal = GRTEMPLATE ? 0 : xoffI == -1 && yoffI == -1 && xoffR == -1 && yoffR == -1;
+
+    if (GRTEMPLATE)
+        DBG("GRTEMPLATE: %d\n", GRTEMPLATE);
+    else
+        DBG("GRTEMPLATE: %d off: (%+d,%+d) (%+d,%+d)\n", GRTEMPLATE, xoffI, yoffI, xoffR, xoffR);
+
+    for (y = 0; y < GRH; y++, imline += imstride, refline += refstride) {
         bit = jbig2_arith_decode(as, &GR_stats[start_context]);
         if (bit < 0)
             return -1;
         LTP = LTP ^ bit;
         if (!LTP) {
+#if defined(NO_INLINE_MKCTX)
             for (x = 0; x < GRW; x++) {
                 bit = jbig2_arith_decode(as, &GR_stats[mkctx(params, image, x, y)]);
                 if (bit < 0)
                     return -1;
-                jbig2_image_set_pixel(image, x, y, bit);
+                SETPIXNOCHECK(image, imline, x, y, bit);
             }
+#else
+            uint32_t CONTEXT = 0;
+
+            x = 0;
+#define INNER_LOOP(MKCTX_PRE, MKCTX_KEEP_MASK) do {                     \
+            MKCTX_PRE(TRUE);                                            \
+            for (; x < GRW; x++) {                                      \
+                MKCTX_PRE(FALSE);                                       \
+                bit = jbig2_arith_decode(as, &GR_stats[CONTEXT]);       \
+                if (bit < 0)                                            \
+                    return -1;                                          \
+                SETPIXNOCHECK(image, imline, x, y, bit);                \
+                CONTEXT = ((CONTEXT << 1) & MKCTX_KEEP_MASK) | bit;     \
+            }                                                           \
+} while(0)
+            if (GRTEMPLATE)
+                INNER_LOOP(MKCTX1_PRE, MKCTX1_KEEP_MASK);
+#ifndef NO_NOMINAL
+            else if (nominal)
+                INNER_LOOP(MKCTX0N_PRE, MKCTX0N_KEEP_MASK);
+#endif
+            else
+                INNER_LOOP(MKCTX0G_PRE, MKCTX0G_KEEP_MASK);
+#undef INNER_LOOP
+#endif
         } else {
+#if !defined(NO_INLINE_IMPLICIT_VALUE)
+#define MKIVCTX_PRE(INIT) do { \
+        if (!INIT) IV_CONTEXT |= GETRELPIX0_ref_const(+1, +1) << 0; \
+        if ( INIT) IV_CONTEXT |= GETRELPIX0_ref_const(+0, +1) << 1; \
+        if ( INIT) IV_CONTEXT |= GETRELPIX0_ref_const(-1, +1) << 2; \
+        if (!INIT) IV_CONTEXT |= GETRELPIX0_ref_const(+1, +0) << 3; \
+        if ( INIT) IV_CONTEXT |= GETRELPIX0_ref_const(+0, +0) << 4; \
+        if ( INIT) IV_CONTEXT |= GETRELPIX0_ref_const(-1, +0) << 5; \
+        if (!INIT) IV_CONTEXT |= GETRELPIX0_ref_const(+1, -1) << 6; \
+        if ( INIT) IV_CONTEXT |= GETRELPIX0_ref_const(+0, -1) << 7; \
+        if ( INIT) IV_CONTEXT |= GETRELPIX0_ref_const(-1, -1) << 8; \
+} while(0)
+#define MKIVCTX_KEEP_MASK \
+      ((1<<1)|(1<<2)|(1<<4)|(1<<5)|(1<<7)|(1<<8))
+
+#ifndef NO_REUSE_IMPLICIT_VALUE
+            /* GRTEMPLATE == 1, reuse IV_CONTEXT */
+#define MKCTX1i_PRE(INIT) do { \
+      if ( INIT) CONTEXT |= GETRELPIX0_image_const(-1, +0) << 0; \
+      if (!INIT) CONTEXT |= GETRELPIX0_image_const(+1, -1) << 1; \
+      if ( INIT) CONTEXT |= GETRELPIX0_image_const(+0, -1) << 2; \
+      if ( INIT) CONTEXT |= GETRELPIX0_image_const(-1, -1) << 3; \
+      if (!INIT) CONTEXT |= (IV_CONTEXT & (1<<0)) << (4-0)/*ref(+1, +1)<<4*/; \
+      if ( INIT) CONTEXT |= (IV_CONTEXT & (1<<1)) << (5-1)/*ref(+0, +1)<<5*/; \
+      if (!INIT) CONTEXT |= (IV_CONTEXT & (1<<3)) << (6-3)/*ref(+1, +0)<<6*/; \
+      if ( INIT) CONTEXT |= (IV_CONTEXT & (1<<4)) << (7-4)/*ref(+0, +0)<<7*/; \
+      if ( INIT) CONTEXT |= (IV_CONTEXT & (1<<5)) << (8-5)/*ref(-1, +0)<<8*/; \
+      if (!INIT) CONTEXT |= (IV_CONTEXT & (1<<7)) << (9-7)/*ref(+0, -1)<<9*/; \
+} while(0)
+#define MKCTX1i_KEEP_MASK MKCTX1_KEEP_MASK
+
+            /* GRTEMPLATE == 0, generic, reuse IV_CONTEXT */
+#define MKCTX0Gi_PRE(INIT) do { \
+      if ( INIT) CONTEXT |= GETRELPIX0_image_const(-1, +0) << 0; \
+      if (!INIT) CONTEXT |= GETRELPIX0_image_const(+1, -1) << 1; \
+      if ( INIT) CONTEXT |= GETRELPIX0_image_const(+0, -1) << 2; \
+      if (!INIT) CONTEXT |= GETRELPIX0_image(xoffI, yoffI, offsetI) << 3; \
+      if (!INIT) CONTEXT |= (IV_CONTEXT << 4) & ~(1<<12); \
+      if (!INIT) CONTEXT |= GETRELPIX0_ref(xoffR, yoffR, offsetR) << 12; \
+} while(0)
+#define MKCTX0Gi_KEEP_MASK ((1<<2))
+
+            /* GRTEMPLATE == 0, nominal, reuse IV_CONTEXT */
+#define MKCTX0Ni_PRE(INIT) do { \
+      if ( INIT) CONTEXT |= GETRELPIX0_image_const(-1, +0) << 0; \
+      if (!INIT) CONTEXT |= GETRELPIX0_image_const(+1, -1) << 1; \
+      if ( INIT) CONTEXT |= GETRELPIX0_image_const(+0, -1) << 2; \
+      if ( INIT) CONTEXT |= GETRELPIX0_image_const(-1, -1) << 3; \
+      if (!INIT) CONTEXT |= (IV_CONTEXT << 4); \
+} while(0)
+#define MKCTX0Ni_KEEP_MASK ((1<<2)|(1<<3))
+#else
+#define MKCTX0Gi_PRE       MKCTX0G_PRE
+#define MKCTX0Gi_KEEP_MASK MKCTX0G_KEEP_MASK
+#define MKCTX0Ni_PRE       MKCTX0N_PRE
+#define MKCTX0Ni_KEEP_MASK MKCTX0N_KEEP_MASK
+#define MKCTX1i_PRE        MKCTX1_PRE
+#define MKCTX1i_KEEP_MASK  MKCTX1_KEEP_MASK
+#endif
+#endif
+#if defined(NO_INLINE_IMPLICIT_VALUE)
             for (x = 0; x < GRW; x++) {
+                int iv;
+
                 iv = implicit_value(params, image, x, y);
                 if (iv < 0) {
                     bit = jbig2_arith_decode(as, &GR_stats[mkctx(params, image, x, y)]);
                     if (bit < 0)
                         return -1;
-                    jbig2_image_set_pixel(image, x, y, bit);
+                    SETPIXNOCHECK(image, imline, x, y, bit);
                 } else
-                    jbig2_image_set_pixel(image, x, y, iv);
+                    SETPIXNOCHECK(image, imline, x, y, iv);
             }
+#elif defined(NO_INLINE_MKCTX)
+            uint32_t IV_CONTEXT = 0;
+
+            x = 0;
+            /* set part of IV_CONTEXT for first iteration */
+            MKIVCTX_PRE(TRUE);
+            for (; x < GRW; x++) {
+                int m = (IV_CONTEXT >> 4) & 1 /*ref_const(+0, +0) */ ;
+                int mmask = ((1 << 9) - 1) & ~(m - 1) /* m ? ((1<<9)-1) : 0 */ ;
+
+                /* set part of IV_CONTEXT for all iterations */
+                MKIVCTX_PRE(FALSE);
+                if ((mmask ^ IV_CONTEXT)) {
+                    m = jbig2_arith_decode(as, &GR_stats[mkctx(params, image, x, y)]);
+                    if (m < 0)
+                        return -1;
+                }
+                SETPIXNOCHECK(image, imline, x, y, m);
+            }
+#else
+            uint32_t IV_CONTEXT = 0;
+
+            x = 0;
+            /* set part of IV_CONTEXT for first iteration */
+            MKIVCTX_PRE(TRUE);
+#define INNER_LOOP(MKCTX_PRE, MKCTX_KEEP_MASK) do {                     \
+            uint32_t CONTEXT = (1<<20); /* INVALID, requires reinit */  \
+            for (; x < GRW; x++) {                                      \
+                int m = (IV_CONTEXT >> 4) & 1/*ref_const(+0, +0)*/;     \
+                int mmask = ((1<<9)-1)&~(m-1) /* m ? ((1<<9)-1) : 0 */; \
+                /* set part of IV_CONTEXT for all iterations */         \
+                MKIVCTX_PRE(FALSE);                                     \
+                if ((mmask ^ IV_CONTEXT)) {                             \
+                    if (CONTEXT == (1<<20)) {                           \
+                        CONTEXT = 0;                                    \
+                        MKCTX_PRE(TRUE);                                \
+                    }                                                   \
+                    MKCTX_PRE(FALSE);                                   \
+                    m = jbig2_arith_decode(as, &GR_stats[CONTEXT]);     \
+                    if (m < 0) return -1;                               \
+                    CONTEXT = ((CONTEXT << 1) & MKCTX_KEEP_MASK) | m;   \
+                } else {                                                \
+                    CONTEXT = (1<<20); /* INVALID, requires re-init */  \
+                }                                                       \
+                SETPIXNOCHECK(image, imline, x, y, m);                  \
+                /* calculate part of IV_CONTEXT for next iteration */   \
+                IV_CONTEXT = (IV_CONTEXT << 1) & MKIVCTX_KEEP_MASK;     \
+            }                                                           \
+} while(0)
+            if (GRTEMPLATE)
+                INNER_LOOP(MKCTX1i_PRE, MKCTX1_KEEP_MASK);
+#ifndef NO_NOMINAL
+            else if (nominal)
+                INNER_LOOP(MKCTX0Ni_PRE, MKCTX0Ni_KEEP_MASK);
+#endif
+            else
+                INNER_LOOP(MKCTX0Gi_PRE, MKCTX0Gi_KEEP_MASK);
+#undef INNER_LOOP
+#endif
+#undef MKIVCTX_PRE
+#undef MKIVCTX_KEEP_MASK
         }
     }
 
@@ -357,6 +747,10 @@ jbig2_decode_refinement_region(Jbig2Ctx *ctx,
 
     if (params->GRTEMPLATE)
         return jbig2_decode_refinement_template1_unopt(ctx, segment, params, as, image, GR_stats);
+#ifndef NO_NOMINAL
+    else if (params->grat[0] == -1 && params->grat[1] == -1 && params->grat[2] == -1 && params->grat[3] == -1)
+        return jbig2_decode_refinement_template0_nominal(ctx, segment, params, as, image, GR_stats);
+#endif
     else
         return jbig2_decode_refinement_template0_unopt(ctx, segment, params, as, image, GR_stats);
 }
