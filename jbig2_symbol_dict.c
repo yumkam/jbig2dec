@@ -1056,7 +1056,7 @@ jbig2_symbol_dictionary(Jbig2Ctx *ctx, Jbig2Segment *segment, const byte *segmen
         } else if((last_referred->flags & (1<<9)) == 0) {
             jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "'Bitmap coding context used' is set, but referred segment's 'Bitmap coding context retained' is not set.");
         } else if(((last_referred->flags ^ flags) & mask) != 0) {
-            jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "'Bitmap coding context used' is set, but referred segment's flags mismatches this segment flags (SDHUFF: %d vs %d, SDREFAGG: %d vs %d, SDTEMPLATE: %d vs %d).",
+            jbig2_error(ctx, JBIG2_SEVERITY_FATAL, segment->number, "'Bitmap coding context used' is set, but referred segment's flags mismatches this segment flags (SDHUFF: %d vs %d, SDREFAGG: %d vs %d, SDTEMPLATE: %d vs %d, SDRTEMPLATE: %d vs %d).",
                     (last_referred->flags >> 0) & 1, params.SDHUFF,
                     (last_referred->flags >> 1) & 1, params.SDREFAGG,
                     (last_referred->flags >> 10) & 3, params.SDTEMPLATE,
